@@ -1,0 +1,63 @@
+# Dependencies
+node_modules/
+__pycache__/
+*.pyc
+.venv/
+venv/
+env/
+
+# Environment variables (NEVER commit secrets)
+.env
+.env.local
+.env.production
+*.env
+
+# Build outputs
+.next/
+dist/
+build/
+out/
+
+# IDE
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+
+# ML artifacts (large files)
+ml/models/*.pkl
+ml/models/*.h5
+ml/data/processed/
+ml/data/raw/*.csv
+
+# ChromaDB
+chroma_db/
+
+# Database
+*.sqlite
+*.db
+postgres-data/
+
+# MLflow
+mlruns/
+
+# Notebooks checkpoints
+.ipynb_checkpoints/
+
+# Coverage
+coverage/
+.coverage
+htmlcov/
+
+# Misc
+*.bak
+*.tmp
