@@ -3,8 +3,10 @@ JEET Simulator — Indian Identity Generator
 
 Generates culturally accurate Indian names, cities, schools, emails, and phones.
 Names are region-correlated: Tamil names with Tamil Nadu cities, Bengali names with
-West Bengal cities, etc. This is what separates believable EdTech data from
-"Faker().name()" garbage.
+West Bengal cities, etc.
+
+Email and phone use process-wide counters to guarantee uniqueness across
+thousands of users (avoids unique constraint violations at scale).
 """
 
 import random
@@ -12,9 +14,6 @@ from typing import Tuple
 
 # =============================================================
 # REGIONAL NAME POOLS
-# =============================================================
-# Source: Most common names by region from Census data + JEE/NEET
-# qualifier lists (publicly available from past 5 years).
 # =============================================================
 
 # ---------- NORTH INDIA (Hindi-belt) ----------
@@ -69,7 +68,7 @@ TELUGU_FIRST_NAMES_MALE = [
 TELUGU_FIRST_NAMES_FEMALE = [
     "Anjali", "Anusha", "Bhavani", "Deepika", "Divya", "Geetha", "Haritha",
     "Jhansi", "Kavya", "Keerthi", "Lavanya", "Madhavi", "Manasa", "Mounika",
-    "Nandini", "Pavani", "Pranathi", "Priya", "Sahasra", "Sai Sri", "Sandhya",
+    "Nandini", "Pavani", "Pranathi", "Priya", "Sahasra", "Sandhya",
     "Sirisha", "Sneha", "Sravani", "Sushma", "Swathi",
 ]
 TELUGU_SURNAMES = [
@@ -122,7 +121,7 @@ MARATHI_FIRST_NAMES_MALE = [
     "Sandip", "Sanket", "Shantanu", "Shreyas", "Soham", "Yash",
 ]
 MARATHI_FIRST_NAMES_FEMALE = [
-    "Aboli", "Aditi", "Aishwarya", "Aishwarya", "Apeksha", "Aparna", "Asawari",
+    "Aboli", "Aditi", "Aishwarya", "Apeksha", "Aparna", "Asawari",
     "Bhakti", "Gauri", "Indira", "Janhavi", "Komal", "Madhuri", "Mansi",
     "Manasi", "Mrunal", "Pranjal", "Prerna", "Radhika", "Rasika", "Sakshi",
     "Shraddha", "Shruti", "Smita", "Snehal", "Sonali", "Tejaswini",
@@ -170,7 +169,6 @@ GUJARATI_SURNAMES = [
 # CITY DATA WITH REGIONAL MAPPING
 # =============================================================
 
-# (city, tier, region) — region determines name pool
 CITY_REGISTRY = [
     # ----- TIER 1 -----
     ("Mumbai",      "tier_1", "marathi"),
@@ -194,7 +192,7 @@ CITY_REGISTRY = [
     ("Vadodara",    "tier_2", "gujarati"),
     ("Coimbatore",  "tier_2", "tamil"),
     ("Visakhapatnam","tier_2", "telugu"),
-    ("Bhubaneswar", "tier_2", "bengali"),  # Closest cultural fit
+    ("Bhubaneswar", "tier_2", "bengali"),
     ("Chandigarh",  "tier_2", "north"),
     ("Kochi",       "tier_2", "malayali"),
     ("Mysore",      "tier_2", "kannada"),
@@ -205,7 +203,7 @@ CITY_REGISTRY = [
     ("Vijayawada",  "tier_2", "telugu"),
     ("Thiruvananthapuram", "tier_2", "malayali"),
 
-    # ----- TIER 3 (Coaching hubs + smaller cities) -----
+    # ----- TIER 3 -----
     ("Kota",        "tier_3", "north"),
     ("Sikar",       "tier_3", "north"),
     ("Aligarh",     "tier_3", "north"),
@@ -231,9 +229,8 @@ CITY_REGISTRY = [
     ("Solapur",     "tier_3", "marathi"),
 ]
 
-KOTA_HUB_CITIES = {"Kota", "Sikar", "Hyderabad", "Delhi"}  # Coaching hubs
+KOTA_HUB_CITIES = {"Kota", "Sikar", "Hyderabad", "Delhi"}
 
-# Cities by tier (for sampling)
 TIER_1_CITIES = [c for c in CITY_REGISTRY if c[1] == "tier_1"]
 TIER_2_CITIES = [c for c in CITY_REGISTRY if c[1] == "tier_2"]
 TIER_3_CITIES = [c for c in CITY_REGISTRY if c[1] == "tier_3"]
@@ -303,6 +300,20 @@ SCHOOL_SUFFIXES = ["School", "Public School", "International School", "Vidyalaya
 
 
 # =============================================================
+# UNIQUENESS COUNTERS (process-wide)
+# =============================================================
+# Wrapped in lists so they're mutable from inside functions
+_email_counter = [0]
+_phone_counter = [0]
+
+
+def reset_uniqueness_counters():
+    """Reset counters. Call at the start of each seeding run."""
+    _email_counter[0] = 0
+    _phone_counter[0] = 0
+
+
+# =============================================================
 # PUBLIC API
 # =============================================================
 def sample_city(rng: random.Random) -> Tuple[str, str, str]:
@@ -317,11 +328,7 @@ def sample_city(rng: random.Random) -> Tuple[str, str, str]:
 
 
 def sample_name(rng: random.Random, gender: str, region: str) -> Tuple[str, str]:
-    """
-    Sample (first_name, surname) from the regional pool.
-    gender: 'male' | 'female'
-    region: 'north' | 'tamil' | 'telugu' | 'kannada' | 'bengali' | 'marathi' | 'malayali' | 'gujarati'
-    """
+    """Sample (first_name, surname) from the regional pool."""
     pool = REGION_NAME_POOLS[region]
     first_name = rng.choice(pool[gender])
     surname = rng.choice(pool["surname"])
@@ -329,7 +336,12 @@ def sample_name(rng: random.Random, gender: str, region: str) -> Tuple[str, str]
 
 
 def generate_email(rng: random.Random, first_name: str, surname: str, birth_year: int) -> str:
-    """Generate realistic Indian student email pattern."""
+    """
+    Generate realistic Indian email pattern with GUARANTEED uniqueness.
+
+    Uses a process-wide counter encoded into the email so collisions
+    are mathematically impossible across a run.
+    """
     fn = first_name.lower().replace(" ", "")
     sn = surname.lower().replace(" ", "")
     domain = rng.choices(
@@ -337,27 +349,40 @@ def generate_email(rng: random.Random, first_name: str, surname: str, birth_year
         weights=[0.75, 0.10, 0.12, 0.03],
         k=1,
     )[0]
+
+    _email_counter[0] += 1
+    counter = _email_counter[0]
+
     patterns = [
-        f"{fn}.{sn}{birth_year % 100:02d}@{domain}",
-        f"{fn}{sn}{birth_year % 100:02d}@{domain}",
-        f"{fn}.{sn}@{domain}",
-        f"{fn}{rng.randint(1, 999)}@{domain}",
-        f"{fn[0]}{sn}{birth_year % 100:02d}@{domain}",
+        f"{fn}.{sn}{birth_year % 100:02d}{counter}@{domain}",
+        f"{fn}{sn}{counter}@{domain}",
+        f"{fn}.{sn}.{counter}@{domain}",
+        f"{fn}{counter}@{domain}",
+        f"{fn[0]}{sn}{counter}@{domain}",
     ]
     return rng.choice(patterns)
 
 
 def generate_phone(rng: random.Random) -> str:
-    """Generate realistic Indian mobile number (10 digits, starts with 6-9)."""
+    """
+    Generate realistic Indian mobile (10 digits, starts with 6-9) with
+    GUARANTEED uniqueness via process-wide counter encoded in the digits.
+    """
+    _phone_counter[0] += 1
+    counter = _phone_counter[0]
+
     first_digit = rng.choice([6, 7, 8, 9])
-    remaining = "".join(str(rng.randint(0, 9)) for _ in range(9))
-    return f"+91{first_digit}{remaining}"
+
+    # 4 random digits + 5-digit counter padded with zeros
+    random_prefix = "".join(str(rng.randint(0, 9)) for _ in range(4))
+    counter_suffix = f"{counter:05d}"[-5:]
+
+    return f"+91{first_digit}{random_prefix}{counter_suffix}"
 
 
 def generate_school_name(rng: random.Random, city: str) -> str:
     """Generate realistic school name."""
     prefix = rng.choice(SCHOOL_PREFIXES)
-    # Some schools have city suffix
     if rng.random() < 0.4:
         return f"{prefix} School, {city}"
     suffix = rng.choice(SCHOOL_SUFFIXES)
@@ -370,7 +395,7 @@ def is_kota_hub(city: str) -> bool:
 
 
 # =============================================================
-# QUICK SANITY TEST
+# SANITY TEST
 # =============================================================
 if __name__ == "__main__":
     rng = random.Random(42)
@@ -392,3 +417,21 @@ if __name__ == "__main__":
         print(f"    📱 {phone}")
         print(f"    🎓 {school}")
         print()
+
+    # Uniqueness sanity check
+    print("=" * 70)
+    print("UNIQUENESS STRESS TEST (10,000 generated)")
+    print("=" * 70)
+    reset_uniqueness_counters()
+    rng = random.Random(42)
+    emails = set()
+    phones = set()
+    for _ in range(10_000):
+        city, tier, region = sample_city(rng)
+        gender = rng.choice(["male", "female"])
+        fn, sn = sample_name(rng, gender, region)
+        birth_year = rng.randint(2006, 2010)
+        emails.add(generate_email(rng, fn, sn, birth_year))
+        phones.add(generate_phone(rng))
+    print(f"  Unique emails: {len(emails):,} / 10,000  {'✅' if len(emails) == 10_000 else '❌'}")
+    print(f"  Unique phones: {len(phones):,} / 10,000  {'✅' if len(phones) == 10_000 else '❌'}")

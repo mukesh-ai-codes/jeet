@@ -3,12 +3,18 @@ JEET Simulator — Bulk Database Loader
 
 Efficiently bulk-inserts generated records into PostgreSQL using
 psycopg2's execute_values for 100x speed over individual INSERTs.
+
+Design choices:
+  - NO 'ON CONFLICT' clauses (loud failures > silent skips)
+  - Verify by querying COUNT(*), not relying on cur.rowcount
+    (rowcount is unreliable across execute_values batches in some
+    psycopg2 versions)
 """
 
 import logging
 from typing import List, Dict
 import psycopg2
-from psycopg2.extras import execute_values, Json
+from psycopg2.extras import execute_values
 import sys
 from pathlib import Path
 
@@ -31,10 +37,29 @@ def get_pg_connection():
     )
 
 
+def _table_count(table_name: str) -> int:
+    """Return exact row count for a table (source of truth)."""
+    conn = get_pg_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(f"SELECT COUNT(*) FROM {table_name}")
+            return cur.fetchone()[0]
+    finally:
+        conn.close()
+
+
 def bulk_insert_users(records: List[Dict]) -> int:
-    """Bulk insert user records into users table."""
+    """
+    Bulk insert user records.
+
+    Verification: counts the table directly (not cur.rowcount which is
+    unreliable with execute_values across multiple batches).
+    """
     if not records:
         return 0
+
+    count_before = _table_count("users")
+
     conn = get_pg_connection()
     try:
         with conn.cursor() as cur:
@@ -44,7 +69,6 @@ def bulk_insert_users(records: List[Dict]) -> int:
                     avatar_url, is_active, email_verified, phone_verified,
                     last_login_at, created_at, updated_at
                 ) VALUES %s
-                ON CONFLICT (email) DO NOTHING
             """
             values = [
                 (
@@ -57,15 +81,28 @@ def bulk_insert_users(records: List[Dict]) -> int:
             ]
             execute_values(cur, sql, values, page_size=500)
             conn.commit()
-            return cur.rowcount
     finally:
         conn.close()
+
+    count_after = _table_count("users")
+    actually_inserted = count_after - count_before
+
+    if actually_inserted != len(records):
+        raise RuntimeError(
+            f"Expected {len(records)} users inserted, table grew by {actually_inserted}. "
+            f"Counts: before={count_before}, after={count_after}. "
+            f"Possible duplicate emails/phones."
+        )
+    return actually_inserted
 
 
 def bulk_insert_user_profiles(records: List[Dict]) -> int:
     """Bulk insert user_profiles records."""
     if not records:
         return 0
+
+    count_before = _table_count("user_profiles")
+
     conn = get_pg_connection()
     try:
         with conn.cursor() as cur:
@@ -78,7 +115,6 @@ def bulk_insert_user_profiles(records: List[Dict]) -> int:
                     additional_concerns, onboarding_completed, completion_percent,
                     created_at, updated_at
                 ) VALUES %s
-                ON CONFLICT (user_id) DO NOTHING
             """
             values = [
                 (
@@ -93,15 +129,26 @@ def bulk_insert_user_profiles(records: List[Dict]) -> int:
             ]
             execute_values(cur, sql, values, page_size=500)
             conn.commit()
-            return cur.rowcount
     finally:
         conn.close()
+
+    count_after = _table_count("user_profiles")
+    actually_inserted = count_after - count_before
+
+    if actually_inserted != len(records):
+        raise RuntimeError(
+            f"Expected {len(records)} profiles inserted, table grew by {actually_inserted}."
+        )
+    return actually_inserted
 
 
 def bulk_insert_families(records: List[Dict]) -> int:
     """Bulk insert families records."""
     if not records:
         return 0
+
+    count_before = _table_count("families")
+
     conn = get_pg_connection()
     try:
         with conn.cursor() as cur:
@@ -110,7 +157,6 @@ def bulk_insert_families(records: List[Dict]) -> int:
                     id, parent_user_id, student_user_id, relationship,
                     is_primary_payer, created_at
                 ) VALUES %s
-                ON CONFLICT (parent_user_id, student_user_id) DO NOTHING
             """
             values = [
                 (
@@ -121,6 +167,14 @@ def bulk_insert_families(records: List[Dict]) -> int:
             ]
             execute_values(cur, sql, values, page_size=500)
             conn.commit()
-            return cur.rowcount
     finally:
         conn.close()
+
+    count_after = _table_count("families")
+    actually_inserted = count_after - count_before
+
+    if actually_inserted != len(records):
+        raise RuntimeError(
+            f"Expected {len(records)} families inserted, table grew by {actually_inserted}."
+        )
+    return actually_inserted

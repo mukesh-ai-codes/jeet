@@ -7,7 +7,7 @@ Generates and bulk-inserts:
   - 50 mentors
   - 5 admins
 
-Total: ~5,600 users in the users table.
+Idempotent: truncates transactional tables before seeding.
 """
 
 import logging
@@ -15,7 +15,6 @@ import random
 import sys
 import uuid
 from pathlib import Path
-from datetime import date
 
 # Path setup
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -24,7 +23,8 @@ from config import (
     NUM_STUDENTS, NUM_MENTORS, NUM_ADMINS, RANDOM_SEED,
     START_DATE, summary,
 )
-from db import healthcheck, get_table_counts
+from db import healthcheck, get_table_counts, truncate_all_data
+from simulator.indian_identity import reset_uniqueness_counters
 from simulator.generators import (
     generate_student, generate_parent,
     generate_mentor, generate_admin,
@@ -42,13 +42,23 @@ logging.basicConfig(
 )
 
 
-def main():
+def main(clean_first: bool = True):
     summary()
     print()
 
     if not healthcheck():
         log.error("❌ Cannot connect to database. Aborting.")
         return
+
+    # Idempotency: clean transactional tables before seeding.
+    if clean_first:
+        log.info("🧹 Cleaning existing transactional data...")
+        truncate_all_data(confirm=True)
+        log.info("✅ Database is clean. Starting fresh seed.")
+        print()
+
+    # Reset uniqueness counters (CRITICAL: must be called before generation)
+    reset_uniqueness_counters()
 
     rng = random.Random(RANDOM_SEED)
 
@@ -57,17 +67,13 @@ def main():
     # =====================================================
     log.info("Phase 1: Generating students...")
     students = []
-    student_metas = []
-
-    # Registration window: 30 days starting from START_DATE
     for _ in tqdm(range(NUM_STUDENTS), desc="  Students"):
         s = generate_student(rng, START_DATE, registration_window_days=30)
         students.append(s)
-
     log.info(f"✅ Generated {len(students)} students")
 
     # =====================================================
-    # PHASE 2: GENERATE PARENTS (85% of students have one)
+    # PHASE 2: GENERATE PARENTS
     # =====================================================
     log.info("Phase 2: Generating parents and family links...")
     parents = []
@@ -115,7 +121,6 @@ def main():
     all_user_records = (
         [s["user"] for s in students] +
         [p["user"] for p in parents] +
-        # Strip mentor-only meta before insert
         [{k: v for k, v in m.items() if not k.startswith("_")} for m in mentors] +
         admins
     )
