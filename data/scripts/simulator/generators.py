@@ -444,3 +444,234 @@ def generate_admin(rng: random.Random, index: int) -> Dict:
         "created_at": created_at,
         "updated_at": created_at,
     }
+# =============================================================
+# COHORT GENERATOR
+# =============================================================
+COHORT_NAME_PATTERNS = [
+    "{exam_track} {year} {city_anchor} {batch_letter}",
+    "{exam_track}-{year} {batch_letter} ({city_anchor} Live)",
+    "{exam_track} {batch_letter} — {city_anchor}",
+]
+
+BATCH_LETTERS = ["Alpha", "Beta", "Gamma", "Delta", "Sigma", "Omega",
+                 "Phoenix", "Vajra", "Pioneer", "Vanguard", "Apex"]
+
+
+def generate_cohort(
+    rng: random.Random,
+    program_id: str,
+    program_slug: str,
+    mentor_user_id: str,
+    start_date,
+    index: int,
+) -> Dict:
+    """Generate one cohort linked to a program and mentor."""
+    exam_track = rng.choice(["JEE-2027", "JEE-2028", "NEET-2027", "NEET-2028", "Foundation-2028"])
+    year = exam_track.split("-")[1]
+    city_anchor = rng.choice(["Mumbai", "Delhi", "Pune", "Bangalore", "Online"])
+    batch_letter = rng.choice(BATCH_LETTERS)
+    pattern = rng.choice(COHORT_NAME_PATTERNS)
+    name = pattern.format(
+        exam_track=exam_track,
+        year=year,
+        city_anchor=city_anchor,
+        batch_letter=batch_letter,
+    )
+
+    duration_days = {
+        "starter": 90,
+        "pro": 180,
+        "mastermind": 365,
+    }.get(program_slug, 180)
+
+    end_date = start_date + timedelta(days=duration_days)
+    max_students = rng.choice([30, 40, 50, 60])
+
+    return {
+        "id": str(uuid.uuid4()),
+        "name": name,
+        "program_id": program_id,
+        "mentor_user_id": mentor_user_id,
+        "start_date": start_date,
+        "end_date": end_date,
+        "max_students": max_students,
+        "current_students": 0,  # Will increment as we enroll
+        "is_active": True,
+        "created_at": datetime.now() - timedelta(days=rng.randint(60, 200)),
+    }
+
+
+# =============================================================
+# ENROLLMENT + SUBSCRIPTION + PAYMENT GENERATOR
+# =============================================================
+def generate_commercial_records(
+    rng: random.Random,
+    student_user_id: str,
+    student_meta: dict,
+    parent_user_id,
+    program_id: str,
+    program_slug: str,
+    program_price_inr,
+    program_duration_months: int,
+    cohort_id,
+    registered_at: datetime,
+) -> Dict:
+    """
+    Generate the full commercial chain for one student:
+      enrollment + subscription + payment(s)
+
+    Behavior is influenced by the student's archetype:
+      - 'financially_stressed' → EMI payments, sometimes late
+      - 'parent_forced' → full upfront from parent
+      - 'unengaged_genius' → may pay partial then ghost
+    """
+    archetype = student_meta["archetype"]
+
+    # ----- ENROLLMENT -----
+    enrollment_id = str(uuid.uuid4())
+    enrollment = {
+        "id": enrollment_id,
+        "student_user_id": student_user_id,
+        "program_id": program_id,
+        "cohort_id": cohort_id,
+        "enrolled_at": registered_at + timedelta(hours=rng.randint(1, 48)),
+        "ended_at": None,
+        "status": "active",
+        "churn_reason": None,
+    }
+
+    # ----- SUBSCRIPTION -----
+    subscription_id = str(uuid.uuid4())
+    start_date = enrollment["enrolled_at"].date()
+    end_date = start_date + timedelta(days=program_duration_months * 30)
+
+    # Most students start in 'trial' for first week, then move to 'active'
+    # For synthetic data we'll just put them as 'active' from day 1
+    subscription_status = "active"
+
+    subscription = {
+        "id": subscription_id,
+        "student_user_id": student_user_id,
+        "payer_user_id": parent_user_id if parent_user_id else student_user_id,
+        "program_id": program_id,
+        "enrollment_id": enrollment_id,
+        "start_date": start_date,
+        "end_date": end_date,
+        "status": subscription_status,
+        "auto_renew": rng.random() < 0.30,
+        "renewal_attempts": 0,
+        "cancelled_at": None,
+        "cancellation_reason": None,
+        "created_at": enrollment["enrolled_at"],
+        "updated_at": enrollment["enrolled_at"],
+    }
+
+    # ----- PAYMENT(S) -----
+    # Decide payment style based on archetype
+    payments = []
+
+    if archetype == "financially_stressed":
+        # 60% pay in EMIs, 40% pay full but late
+        if rng.random() < 0.60:
+            # 2-3 EMIs
+            num_emis = rng.choice([2, 3])
+            installment_amount = round(float(program_price_inr) / num_emis, 2)
+            for i in range(num_emis):
+                pay_date = enrollment["enrolled_at"] + timedelta(days=i * 30 + rng.randint(0, 7))
+                status = "captured" if rng.random() < 0.90 else "failed"
+                payments.append(_build_payment(
+                    rng, subscription_id, subscription["payer_user_id"],
+                    installment_amount, status, pay_date,
+                ))
+        else:
+            # Full but delayed
+            pay_date = enrollment["enrolled_at"] + timedelta(days=rng.randint(3, 14))
+            status = "captured" if rng.random() < 0.95 else "failed"
+            payments.append(_build_payment(
+                rng, subscription_id, subscription["payer_user_id"],
+                float(program_price_inr), status, pay_date,
+            ))
+
+    elif archetype == "parent_forced":
+        # Always full upfront, immediate, no issues
+        pay_date = enrollment["enrolled_at"] + timedelta(hours=rng.randint(1, 24))
+        payments.append(_build_payment(
+            rng, subscription_id, subscription["payer_user_id"],
+            float(program_price_inr), "captured", pay_date,
+        ))
+
+    elif archetype == "unengaged_genius":
+        # Sometimes pay partial, sometimes full
+        if rng.random() < 0.20:
+            # Initial payment only, will likely not renew
+            pay_date = enrollment["enrolled_at"] + timedelta(hours=rng.randint(1, 12))
+            payments.append(_build_payment(
+                rng, subscription_id, subscription["payer_user_id"],
+                float(program_price_inr) * 0.5, "captured", pay_date,
+            ))
+        else:
+            pay_date = enrollment["enrolled_at"] + timedelta(hours=rng.randint(1, 24))
+            payments.append(_build_payment(
+                rng, subscription_id, subscription["payer_user_id"],
+                float(program_price_inr), "captured", pay_date,
+            ))
+
+    else:
+        # Default: most students pay upfront with rare failures
+        pay_date = enrollment["enrolled_at"] + timedelta(hours=rng.randint(1, 72))
+        # First attempt: 92% success rate
+        if rng.random() < 0.92:
+            payments.append(_build_payment(
+                rng, subscription_id, subscription["payer_user_id"],
+                float(program_price_inr), "captured", pay_date,
+            ))
+        else:
+            # First failed, second succeeded
+            payments.append(_build_payment(
+                rng, subscription_id, subscription["payer_user_id"],
+                float(program_price_inr), "failed", pay_date,
+            ))
+            retry_date = pay_date + timedelta(hours=rng.randint(2, 48))
+            payments.append(_build_payment(
+                rng, subscription_id, subscription["payer_user_id"],
+                float(program_price_inr), "captured", retry_date,
+            ))
+
+    return {
+        "enrollment": enrollment,
+        "subscription": subscription,
+        "payments": payments,
+    }
+
+
+def _build_payment(rng, subscription_id, payer_user_id, amount, status, paid_at):
+    """Helper to build a single payment record."""
+    method = rng.choices(
+        ["upi", "card", "netbanking", "wallet"],
+        weights=[0.55, 0.25, 0.15, 0.05],
+    )[0]
+
+    return {
+        "id": str(uuid.uuid4()),
+        "subscription_id": subscription_id,
+        "payer_user_id": payer_user_id,
+        "amount_inr": round(amount, 2),
+        "currency": "INR",
+        "status": status,
+        "payment_method": method,
+        "razorpay_order_id": f"order_{uuid.uuid4().hex[:14]}",
+        "razorpay_payment_id": f"pay_{uuid.uuid4().hex[:14]}" if status == "captured" else None,
+        "razorpay_signature": uuid.uuid4().hex if status == "captured" else None,
+        "idempotency_key": uuid.uuid4().hex,
+        "initiated_at": paid_at - timedelta(minutes=rng.randint(1, 5)),
+        "paid_at": paid_at if status == "captured" else None,
+        "failed_at": paid_at if status == "failed" else None,
+        "failure_reason": rng.choice([
+            "Insufficient balance",
+            "Card declined by issuer",
+            "Authentication failed",
+            "Bank server timeout",
+        ]) if status == "failed" else None,
+        "refunded_amount_inr": 0,
+        "refunded_at": None,
+    }
