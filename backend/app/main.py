@@ -9,8 +9,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
-from app.api import auth, health, students, mentors, admin
-
+from app.api import auth, health, students, mentors, admin, courses, parents
 # =============================================================
 # LIFESPAN: startup & shutdown hooks
 # =============================================================
@@ -61,6 +60,8 @@ app.include_router(auth.router)
 app.include_router(students.router)
 app.include_router(mentors.router)
 app.include_router(admin.router)
+app.include_router(courses.router)
+app.include_router(parents.router)
 
 
 # =============================================================

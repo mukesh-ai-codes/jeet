@@ -53,3 +53,6 @@ class ParentDashboard(BaseModel):
 
     # Recent activity
     last_login_at: Optional[datetime] = None
+    # =============================================================
+# (Already defined above: ChildSummary, ParentChildrenResponse, WhisperInsight, ParentDashboard)
+# =============================================================

@@ -206,3 +206,197 @@ def get_my_streak(
         total_active_days=total_active,
         daily_activity=activity_list,
     )
+# =============================================================
+# PERSONALIZED RECOMMENDATIONS
+# =============================================================
+from app.schemas.course import (
+    RecommendedLesson, RecommendationResponse, LessonSummary,
+    WeakChapter, WeakChaptersResponse, TrackEventRequest, TrackEventResponse,
+)
+import uuid
+
+
+@router.get("/me/recommended-lessons", response_model=RecommendationResponse)
+def get_recommended_lessons(
+    payload: dict = Depends(require_role("student")),
+    db: Session = Depends(get_db),
+):
+    """
+    Recommend next 5 lessons based on:
+      - Student's weak subjects (priority)
+      - Chapters where they've failed quizzes
+      - Lessons they haven't completed yet
+    """
+    user_id = payload["sub"]
+
+    # Get weak subjects from profile
+    profile = db.execute(text("""
+        SELECT weak_subjects FROM user_profiles WHERE user_id = :uid
+    """), {"uid": user_id}).mappings().fetchone()
+
+    weak_subjects = profile["weak_subjects"] if profile and profile["weak_subjects"] else []
+
+    # Find lessons not yet completed in weak chapters
+    weak_subject_lower = [s.lower() for s in weak_subjects]
+
+    rows = db.execute(text("""
+        WITH completed_lessons AS (
+            SELECT (event_data->>'lesson_id') AS lesson_id
+            FROM events
+            WHERE user_id::text = :uid AND event_type = 'lesson_completed'
+        ),
+        weak_chapters AS (
+            SELECT DISTINCT
+                a.chapter,
+                s.id AS subject_id
+            FROM assessments a
+            JOIN subjects s ON s.id = a.subject_id
+            WHERE a.student_user_id::text = :uid
+              AND (a.score::numeric / a.max_score) < 0.5
+        )
+        SELECT
+            l.id::text,
+            s.name AS subject_name,
+            l.chapter,
+            l.title,
+            l.duration_minutes,
+            l.difficulty_level,
+            l.sequence_order,
+            CASE
+                WHEN EXISTS (SELECT 1 FROM weak_chapters wc
+                             WHERE wc.chapter = l.chapter AND wc.subject_id = l.subject_id)
+                    THEN 'You scored low on this chapter — revisit fundamentals'
+                WHEN LOWER(s.name) = ANY(:weak_lower)
+                    THEN 'Strengthen your weak subject'
+                ELSE 'Continue your learning path'
+            END AS reason
+        FROM lessons l
+        JOIN subjects s ON s.id = l.subject_id
+        WHERE l.is_published = TRUE
+          AND l.id::text NOT IN (SELECT lesson_id FROM completed_lessons WHERE lesson_id IS NOT NULL)
+        ORDER BY
+            CASE WHEN LOWER(s.name) = ANY(:weak_lower) THEN 0 ELSE 1 END,
+            l.difficulty_level,
+            l.sequence_order
+        LIMIT 5
+    """), {"uid": user_id, "weak_lower": weak_subject_lower}).mappings().all()
+
+    return RecommendationResponse(
+        student_user_id=user_id,
+        recommendations=[
+            RecommendedLesson(
+                lesson=LessonSummary(
+                    id=r["id"],
+                    subject_name=r["subject_name"],
+                    chapter=r["chapter"],
+                    title=r["title"],
+                    duration_minutes=r["duration_minutes"],
+                    difficulty_level=r["difficulty_level"],
+                    sequence_order=r["sequence_order"],
+                ),
+                reason=r["reason"],
+            )
+            for r in rows
+        ],
+    )
+
+
+@router.get("/me/weak-chapters", response_model=WeakChaptersResponse)
+def get_my_weak_chapters(
+    payload: dict = Depends(require_role("student")),
+    db: Session = Depends(get_db),
+):
+    """Chapters where this student is underperforming."""
+    user_id = payload["sub"]
+
+    rows = db.execute(text("""
+        SELECT
+            s.name AS subject_name,
+            a.chapter,
+            COUNT(*) AS quizzes_attempted,
+            ROUND(AVG((a.score::numeric / a.max_score) * 100), 2) AS avg_score,
+            MAX(a.submitted_at) AS last_attempted_at
+        FROM assessments a
+        JOIN subjects s ON s.id = a.subject_id
+        WHERE a.student_user_id::text = :uid
+        GROUP BY s.name, a.chapter
+        HAVING AVG((a.score::numeric / a.max_score) * 100) < 50
+        ORDER BY avg_score ASC
+        LIMIT 10
+    """), {"uid": user_id}).mappings().all()
+
+    return WeakChaptersResponse(
+        student_user_id=user_id,
+        weak_chapters=[
+            WeakChapter(
+                subject_name=r["subject_name"],
+                chapter=r["chapter"],
+                quizzes_attempted=r["quizzes_attempted"],
+                avg_score=float(r["avg_score"]),
+                last_attempted_at=r["last_attempted_at"],
+            )
+            for r in rows
+        ],
+    )
+
+
+@router.post("/me/lessons/{lesson_id}/track-event", response_model=TrackEventResponse)
+def track_lesson_event(
+    lesson_id: str,
+    body: TrackEventRequest,
+    payload: dict = Depends(require_role("student")),
+    db: Session = Depends(get_db),
+):
+    """
+    Track a lesson event (frontend calls this on play, pause, complete, etc.)
+    Writes one row to the events table.
+    """
+    from psycopg2.extras import Json
+    user_id = payload["sub"]
+    event_id = str(uuid.uuid4())
+    session_id = str(uuid.uuid4())
+
+    # Validate event type
+    valid_events = {
+        "lesson_started", "lesson_completed", "lesson_paused",
+        "lesson_resumed", "lesson_abandoned", "lesson_replayed",
+        "notes_downloaded", "playback_speed_changed",
+    }
+    if body.event_type not in valid_events:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid event_type. Allowed: {sorted(valid_events)}",
+        )
+
+    # Build event_data with lesson_id always included
+    event_data = dict(body.event_data) if body.event_data else {}
+    event_data["lesson_id"] = lesson_id
+
+    # Insert using SQLAlchemy's native JSON support (cleaner than string cast)
+    import json as _json
+    try:
+        db.execute(text("""
+            INSERT INTO events (
+                id, user_id, event_type, event_data, session_id,
+                ip_address, user_agent, created_at
+            )
+            VALUES (
+                :id, :uid, :etype, CAST(:edata AS jsonb), :sid,
+                NULL, NULL, NOW()
+            )
+        """), {
+            "id": event_id,
+            "uid": user_id,
+            "etype": body.event_type,
+            "edata": _json.dumps(event_data),
+            "sid": session_id,
+        })
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to record event: {str(e)[:200]}",
+        )
+
+    return TrackEventResponse(event_id=event_id, accepted=True)
