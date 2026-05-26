@@ -338,3 +338,101 @@ def bulk_insert_payments(records: List[Dict]) -> int:
     if grew_by != len(records):
         raise RuntimeError(f"Expected {len(records)} payments, table grew by {grew_by}")
     return grew_by
+# =============================================================
+# EVENT / ATTENDANCE / ASSESSMENT LOADERS
+# =============================================================
+
+def bulk_insert_attendance(records: List[Dict]) -> int:
+    if not records:
+        return 0
+    count_before = _table_count("attendance")
+    conn = get_pg_connection()
+    try:
+        with conn.cursor() as cur:
+            sql = """
+                INSERT INTO attendance (
+                    id, enrollment_id, lesson_id, subject_id, session_date,
+                    joined, joined_at, left_at, duration_minutes,
+                    engagement_score, created_at
+                ) VALUES %s
+            """
+            values = [
+                (r["id"], r["enrollment_id"], r["lesson_id"], r["subject_id"],
+                 r["session_date"], r["joined"], r["joined_at"], r["left_at"],
+                 r["duration_minutes"], r["engagement_score"], r["created_at"])
+                for r in records
+            ]
+            execute_values(cur, sql, values, page_size=1000)
+            conn.commit()
+    finally:
+        conn.close()
+    count_after = _table_count("attendance")
+    grew_by = count_after - count_before
+    if grew_by != len(records):
+        raise RuntimeError(f"Expected {len(records)} attendance, table grew by {grew_by}")
+    return grew_by
+
+
+def bulk_insert_assessments(records: List[Dict]) -> int:
+    if not records:
+        return 0
+    count_before = _table_count("assessments")
+    conn = get_pg_connection()
+    try:
+        with conn.cursor() as cur:
+            sql = """
+                INSERT INTO assessments (
+                    id, student_user_id, subject_id, chapter, title,
+                    score, max_score, time_taken_minutes,
+                    difficulty_level, submitted_at
+                ) VALUES %s
+            """
+            values = [
+                (r["id"], r["student_user_id"], r["subject_id"], r["chapter"],
+                 r["title"], r["score"], r["max_score"], r["time_taken_minutes"],
+                 r["difficulty_level"], r["submitted_at"])
+                for r in records
+            ]
+            execute_values(cur, sql, values, page_size=1000)
+            conn.commit()
+    finally:
+        conn.close()
+    count_after = _table_count("assessments")
+    grew_by = count_after - count_before
+    if grew_by != len(records):
+        raise RuntimeError(f"Expected {len(records)} assessments, table grew by {grew_by}")
+    return grew_by
+
+
+def bulk_insert_events(records: List[Dict]) -> int:
+    """
+    The BIG loader. Events table will grow to ~1.4M rows.
+    Uses larger page_size for throughput.
+    """
+    if not records:
+        return 0
+    count_before = _table_count("events")
+    conn = get_pg_connection()
+    try:
+        with conn.cursor() as cur:
+            sql = """
+                INSERT INTO events (
+                    id, user_id, event_type, event_data, session_id,
+                    ip_address, user_agent, created_at
+                ) VALUES %s
+            """
+            from psycopg2.extras import Json
+            values = [
+                (r["id"], r["user_id"], r["event_type"], Json(r["event_data"]),
+                 r["session_id"], r["ip_address"], r["user_agent"], r["created_at"])
+                for r in records
+            ]
+            execute_values(cur, sql, values, page_size=2000)
+            conn.commit()
+    finally:
+        conn.close()
+    count_after = _table_count("events")
+    grew_by = count_after - count_before
+    if grew_by != len(records):
+        raise RuntimeError(f"Expected {len(records)} events, table grew by {grew_by}")
+    return grew_by
