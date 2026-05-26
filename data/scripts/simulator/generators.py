@@ -31,10 +31,12 @@ from simulator.archetypes import (
 # =============================================================
 # PASSWORD HASHING
 # =============================================================
-# In production, use bcrypt. For synthetic data, we use a deterministic
-# hash so devs can log in as any student with password "demo123!".
-DEMO_PASSWORD_HASH = "$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewKyAOudCsg/p21S"
-# This is bcrypt hash of "demo123!" — fine for synthetic data only.
+# For synthetic data, we generate a real bcrypt hash of "demo123!"
+# at import time so all users can be logged in with that password.
+from passlib.context import CryptContext as _CryptContext
+_pwd_ctx = _CryptContext(schemes=["bcrypt"], deprecated="auto")
+DEMO_PASSWORD_HASH = _pwd_ctx.hash("demo123!")
+# Every synthetic user has password "demo123!" — dev convenience only.
 
 
 # =============================================================
