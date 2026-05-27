@@ -1,0 +1,133 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-jeet-indigo: var(--jeet-indigo);
+  --color-jeet-orange: var(--jeet-orange);
+  --color-jeet-success: var(--jeet-success);
+  --color-jeet-warning: var(--jeet-warning);
+  --color-jeet-danger: var(--jeet-danger);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+:root {
+  --radius: 0.625rem;
+
+  /* Base shadcn palette */
+  --background: oklch(0.99 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.42 0.18 268);    /* JEET Indigo #4F46E5 */
+  --primary-foreground: oklch(0.99 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(0.99 0 0);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.42 0.18 268);
+
+  /* JEET brand tokens */
+  --jeet-indigo:  oklch(0.42 0.18 268);    /* primary */
+  --jeet-orange:  oklch(0.71 0.18 50);     /* warm accent */
+  --jeet-success: oklch(0.65 0.18 145);    /* positive metrics */
+  --jeet-warning: oklch(0.75 0.16 80);     /* watch tier */
+  --jeet-danger:  oklch(0.62 0.22 25);     /* urgent risk */
+}
+
+.dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.2 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.2 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.65 0.18 268);
+  --primary-foreground: oklch(0.145 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --destructive-foreground: oklch(0.985 0 0);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.65 0.18 268);
+}
+
+* {
+  border-color: var(--border);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-inter), system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Typography utilities */
+.font-display {
+  font-family: var(--font-lora), Georgia, serif;
+  letter-spacing: -0.02em;
+}
+.font-hindi {
+  font-family: var(--font-hind), system-ui, sans-serif;
+  font-weight: 500;
+}
+
+/* Subtle gradient backgrounds for hero sections */
+.gradient-indigo-soft {
+  background: linear-gradient(135deg,
+    oklch(0.95 0.04 268) 0%,
+    oklch(0.98 0.02 50) 100%);
+}
+
+/* Risk tier badges */
+.tier-urgent  { background: oklch(0.62 0.22 25 / 0.1); color: oklch(0.45 0.22 25); }
+.tier-critical { background: oklch(0.71 0.18 50 / 0.1); color: oklch(0.5 0.18 50); }
+.tier-watch   { background: oklch(0.75 0.16 80 / 0.1); color: oklch(0.5 0.16 80); }
+.tier-stable  { background: oklch(0.65 0.18 145 / 0.1); color: oklch(0.4 0.18 145); }
+
+@keyframes pulse-soft {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.animate-pulse-soft {
+  animation: pulse-soft 2s ease-in-out infinite;
+}
