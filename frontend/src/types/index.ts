@@ -2,18 +2,28 @@
  * JEET — Shared TypeScript Types
  *
  * Mirrors the Pydantic schemas in the FastAPI backend.
+ * When backend schemas change, this file is the single point of update.
  */
+
+// =========================
+// Roles & Auth
+// =========================
 
 export type UserRole = "student" | "parent" | "mentor" | "admin";
 
 export interface AuthUser {
-  user_id: string;
+  id: string;
   email: string;
   full_name: string;
   role: UserRole;
-  phone?: string;
-  is_active: boolean;
-  email_verified: boolean;
+  phone?: string | null;
+  institute_id: string;
+  is_onboarded: boolean;
+}
+
+export interface LoginRequest {
+  email: string;
+  password: string;
 }
 
 export interface LoginResponse {
@@ -22,7 +32,16 @@ export interface LoginResponse {
   user: AuthUser;
 }
 
+// =========================
+// Risk tiers (mentor / admin views)
+// =========================
+
 export type RiskTier = "urgent" | "critical" | "watch" | "stable" | "lost";
+
+// =========================
+// Student dashboard
+// (Returned from GET /api/students/me/dashboard — Day 13 will consume this)
+// =========================
 
 export interface StudentDashboard {
   profile: {
@@ -80,6 +99,10 @@ export interface StudentDashboard {
     submitted_at: string;
   }>;
 }
+
+// =========================
+// Catalog
+// =========================
 
 export interface Program {
   id: string;

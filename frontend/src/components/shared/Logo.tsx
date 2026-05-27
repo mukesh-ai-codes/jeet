@@ -1,12 +1,30 @@
 import { cn } from "@/lib/utils";
 
+type LogoVariant = "default" | "white";
+
 interface LogoProps {
   size?: "sm" | "md" | "lg";
   showWordmark?: boolean;
+  variant?: LogoVariant;
   className?: string;
 }
 
-export default function Logo({ size = "md", showWordmark = true, className }: LogoProps) {
+/**
+ * Signal Waves logo — orange center dot + 3 concentric indigo arcs.
+ *
+ * Variants:
+ *   "default" — indigo arcs + zinc wordmark, for light backgrounds
+ *   "white"   — white arcs + white wordmark, for dark/indigo backgrounds
+ *
+ * The orange center dot stays consistent across variants — it's the
+ * brand's anchor color and remains visible on both light and dark.
+ */
+export default function Logo({
+  size = "md",
+  showWordmark = true,
+  variant = "default",
+  className,
+}: LogoProps) {
   const dimensions = {
     sm: { mark: 20, text: "text-lg" },
     md: { mark: 28, text: "text-2xl" },
@@ -14,6 +32,10 @@ export default function Logo({ size = "md", showWordmark = true, className }: Lo
   };
 
   const { mark, text } = dimensions[size];
+
+  // Color theming
+  const arcColor = variant === "white" ? "#FFFFFF" : "#4F46E5";
+  const wordmarkClass = variant === "white" ? "text-white" : "text-zinc-900";
 
   return (
     <div className={cn("inline-flex items-center gap-2.5", className)}>
@@ -29,14 +51,14 @@ export default function Logo({ size = "md", showWordmark = true, className }: Lo
         <path
           d="M 9 20 A 11 11 0 0 1 31 20"
           fill="none"
-          stroke="#4F46E5"
+          stroke={arcColor}
           strokeWidth="2.5"
           strokeLinecap="round"
         />
         <path
           d="M 4 20 A 16 16 0 0 1 36 20"
           fill="none"
-          stroke="#4F46E5"
+          stroke={arcColor}
           strokeWidth="2"
           strokeLinecap="round"
           opacity="0.55"
@@ -44,14 +66,14 @@ export default function Logo({ size = "md", showWordmark = true, className }: Lo
         <path
           d="M 0 20 A 20 20 0 0 1 40 20"
           fill="none"
-          stroke="#4F46E5"
+          stroke={arcColor}
           strokeWidth="1.5"
           strokeLinecap="round"
           opacity="0.3"
         />
       </svg>
       {showWordmark && (
-        <span className={cn("font-bold tracking-tight text-zinc-900", text)}>
+        <span className={cn("font-bold tracking-tight", text, wordmarkClass)}>
           JEET
         </span>
       )}

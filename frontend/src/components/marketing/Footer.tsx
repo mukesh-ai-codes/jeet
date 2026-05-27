@@ -4,25 +4,17 @@ export default function Footer() {
   return (
     <footer className="border-t border-slate-200 bg-white">
       <div className="mx-auto max-w-7xl px-6 py-16">
-        {/* Bilingual chorus — the emotional anchor */}
+        {/* Brand promise */}
         <div className="mb-12 text-center">
-          <p
-            className="text-xl md:text-2xl text-slate-900"
-            style={{
-              fontFamily:
-                'var(--font-hind), "Noto Sans Devanagari", system-ui, sans-serif',
-              fontWeight: 500,
-              lineHeight: 1.6,
-            }}
-          >
-            हर स्टूडेंट टिकता है। हर इंस्टीट्यूट जीतता है।
+          <p className="font-display text-2xl md:text-3xl font-bold text-slate-900 tracking-tight">
+            JEET — <span className="text-indigo-600">AI-Powered Student Retention</span>
           </p>
           <p className="mt-3 text-sm text-slate-500">
-            Every student stays. Every institute wins.
+            Stop dropouts before they start.
           </p>
         </div>
 
-        {/* 3-column footer */}
+        {/* 4-column footer */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8 pt-8 border-t border-slate-100">
           <div className="md:col-span-1">
             <Logo size="md" />
