@@ -19,6 +19,9 @@ from app.schemas.student import (
     EngagementBlock, LearningProgressBlock, AssessmentSummaryBlock,
     RecentAssessment, StreakResponse, DailyActivity,
 )
+from app.schemas.course import (
+    LessonSummary, DailyPlanItem, DailyPlanResponse,
+)
 
 
 router = APIRouter(prefix="/api/students", tags=["Students"])
@@ -400,3 +403,213 @@ def track_lesson_event(
         )
 
     return TrackEventResponse(event_id=event_id, accepted=True)
+
+
+# =============================================================
+# DAILY PLAN GENERATOR (Day 13)
+# =============================================================
+#
+# Note on data model (flagged for Day 26 polish):
+#   In current synthetic seed, assessments.chapter and lessons.chapter use
+#   different naming conventions (27 broad concepts vs 105 NCERT chapters,
+#   only 8 overlap). Until the seed is regenerated with unified chapter
+#   names, SLOT 1 (review) and SLOT 3 (practice) match on SUBJECT, not
+#   chapter. Production data will not have this issue — institutes feed
+#   their own curriculum and both tables reference the same source.
+#
+# =============================================================
+
+@router.get("/me/daily-plan", response_model=DailyPlanResponse)
+def get_my_daily_plan(
+    payload: dict = Depends(require_role("student")),
+    db: Session = Depends(get_db),
+):
+    """
+    Generate 3-slot personalized plan for today:
+      - review:   weakest subject (assessment avg < 55%) -> easy unfinished lesson
+      - learn:    next sequential lesson in subjects matching target_exam
+      - practice: subject where recent scores plateaued (55-75%) -> level-up lesson
+
+    Each slot is independent. Missing data degrades gracefully to fewer items
+    rather than failing the request.
+
+    Rules-based for Day 13. Days 17-19 will replace internals with ML scoring;
+    the API contract stays stable.
+    """
+    from datetime import datetime, timezone
+    user_id = payload["sub"]
+
+    items: list[DailyPlanItem] = []
+
+    # ---------- SLOT 1: REVIEW (weakest subject) ----------
+    review_row = db.execute(text("""
+        WITH completed_lessons AS (
+            SELECT (event_data->>'lesson_id') AS lesson_id
+            FROM events
+            WHERE user_id::text = :uid AND event_type = 'lesson_completed'
+        ),
+        weakest_subject AS (
+            SELECT
+                a.subject_id,
+                AVG(a.score::numeric / NULLIF(a.max_score, 0)) AS avg_pct
+            FROM assessments a
+            WHERE a.student_user_id::text = :uid
+              AND a.max_score > 0
+            GROUP BY a.subject_id
+            HAVING AVG(a.score::numeric / NULLIF(a.max_score, 0)) < 0.55
+               AND COUNT(*) >= 1
+            ORDER BY avg_pct ASC
+            LIMIT 1
+        )
+        SELECT
+            l.id::text,
+            s.name AS subject_name,
+            l.chapter,
+            l.title,
+            l.duration_minutes,
+            l.difficulty_level,
+            l.sequence_order,
+            ws.avg_pct
+        FROM weakest_subject ws
+        JOIN lessons l ON l.subject_id = ws.subject_id
+        JOIN subjects s ON s.id = l.subject_id
+        WHERE l.is_published = TRUE
+          AND l.id::text NOT IN (SELECT lesson_id FROM completed_lessons WHERE lesson_id IS NOT NULL)
+        ORDER BY l.difficulty_level ASC, l.sequence_order ASC
+        LIMIT 1
+    """), {"uid": user_id}).mappings().fetchone()
+
+    if review_row:
+        score_pct = round(float(review_row["avg_pct"]) * 100)
+        items.append(DailyPlanItem(
+            slot="review",
+            label="Strengthen your weak subject",
+            reason=f"You're averaging {score_pct}% in {review_row['subject_name']} — let's fix the foundations.",
+            lesson=LessonSummary(
+                id=review_row["id"],
+                subject_name=review_row["subject_name"],
+                chapter=review_row["chapter"],
+                title=review_row["title"],
+                duration_minutes=review_row["duration_minutes"],
+                difficulty_level=review_row["difficulty_level"],
+                sequence_order=review_row["sequence_order"],
+            ),
+        ))
+
+    # ---------- SLOT 2: LEARN (next sequential lesson for target exam) ----------
+    learn_row = db.execute(text("""
+        WITH completed_lessons AS (
+            SELECT (event_data->>'lesson_id') AS lesson_id
+            FROM events
+            WHERE user_id::text = :uid AND event_type = 'lesson_completed'
+        ),
+        student_target AS (
+            SELECT target_exam FROM user_profiles WHERE user_id::text = :uid
+        )
+        SELECT
+            l.id::text,
+            s.name AS subject_name,
+            l.chapter,
+            l.title,
+            l.duration_minutes,
+            l.difficulty_level,
+            l.sequence_order
+        FROM lessons l
+        JOIN subjects s ON s.id = l.subject_id
+        WHERE l.is_published = TRUE
+          AND (
+            (SELECT target_exam FROM student_target) IS NULL
+            OR (SELECT target_exam FROM student_target) = ANY(s.exam_types)
+          )
+          AND l.id::text NOT IN (SELECT lesson_id FROM completed_lessons WHERE lesson_id IS NOT NULL)
+        ORDER BY l.sequence_order ASC, l.difficulty_level ASC
+        LIMIT 1
+    """), {"uid": user_id}).mappings().fetchone()
+
+    if learn_row:
+        items.append(DailyPlanItem(
+            slot="learn",
+            label="Today's new lesson",
+            reason="Next in your sequence — keeps you on track with your cohort.",
+            lesson=LessonSummary(
+                id=learn_row["id"],
+                subject_name=learn_row["subject_name"],
+                chapter=learn_row["chapter"],
+                title=learn_row["title"],
+                duration_minutes=learn_row["duration_minutes"],
+                difficulty_level=learn_row["difficulty_level"],
+                sequence_order=learn_row["sequence_order"],
+            ),
+        ))
+
+    # ---------- SLOT 3: PRACTICE (subject plateau -> level-up lesson) ----------
+    # Match on subject (not chapter) for the same data-model reason as SLOT 1.
+    # Also exclude the subject already picked in SLOT 1 so we don't duplicate.
+    review_subject_id = None
+    if review_row:
+        # The review lesson's subject_id can be re-derived from the same row.
+        # We didn't carry it in the SELECT; fetch the subject_id of the lesson now.
+        sub_row = db.execute(text("""
+            SELECT subject_id::text FROM lessons WHERE id::text = :lid
+        """), {"lid": review_row["id"]}).mappings().fetchone()
+        if sub_row:
+            review_subject_id = sub_row["subject_id"]
+
+    practice_row = db.execute(text("""
+        WITH completed_lessons AS (
+            SELECT (event_data->>'lesson_id') AS lesson_id
+            FROM events
+            WHERE user_id::text = :uid AND event_type = 'lesson_completed'
+        ),
+        recent_plateau AS (
+            SELECT
+                a.subject_id,
+                AVG(a.score::numeric / NULLIF(a.max_score, 0)) AS recent_pct
+            FROM assessments a
+            WHERE a.student_user_id::text = :uid
+              AND a.max_score > 0
+              AND a.submitted_at >= NOW() - INTERVAL '21 days'
+            GROUP BY a.subject_id
+            HAVING AVG(a.score::numeric / NULLIF(a.max_score, 0)) BETWEEN 0.55 AND 0.75
+              AND (:review_sub IS NULL OR a.subject_id::text <> :review_sub)
+            ORDER BY recent_pct ASC
+            LIMIT 1
+        )
+        SELECT
+            l.id::text,
+            s.name AS subject_name,
+            l.chapter,
+            l.title,
+            l.duration_minutes,
+            l.difficulty_level,
+            l.sequence_order
+        FROM recent_plateau rp
+        JOIN lessons l ON l.subject_id = rp.subject_id
+        JOIN subjects s ON s.id = l.subject_id
+        WHERE l.is_published = TRUE
+          AND l.id::text NOT IN (SELECT lesson_id FROM completed_lessons WHERE lesson_id IS NOT NULL)
+        ORDER BY l.difficulty_level DESC, l.sequence_order DESC
+        LIMIT 1
+    """), {"uid": user_id, "review_sub": review_subject_id}).mappings().fetchone()
+
+    if practice_row:
+        items.append(DailyPlanItem(
+            slot="practice",
+            label="Practice to build confidence",
+            reason=f"Lock in {practice_row['subject_name']} — you're close to mastering it.",
+            lesson=LessonSummary(
+                id=practice_row["id"],
+                subject_name=practice_row["subject_name"],
+                chapter=practice_row["chapter"],
+                title=practice_row["title"],
+                duration_minutes=practice_row["duration_minutes"],
+                difficulty_level=practice_row["difficulty_level"],
+                sequence_order=practice_row["sequence_order"],
+            ),
+        ))
+
+    return DailyPlanResponse(
+        student_user_id=user_id,
+        items=items,
+        generated_at=datetime.now(timezone.utc),
+    )

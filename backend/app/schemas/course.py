@@ -96,3 +96,21 @@ class TrackEventRequest(BaseModel):
 class TrackEventResponse(BaseModel):
     event_id: str
     accepted: bool
+
+# =============================================================
+# DAILY PLAN (Day 13)
+# =============================================================
+
+class DailyPlanItem(BaseModel):
+    """One slot in the student's daily plan."""
+    slot: str  # 'review' | 'learn' | 'practice'
+    label: str  # "Review your weak chapter" — short human-readable
+    reason: str  # Why this was picked, shown as a sub-line
+    lesson: LessonSummary
+
+
+class DailyPlanResponse(BaseModel):
+    """3-slot personalized daily plan. Some slots may be missing if data is thin."""
+    student_user_id: str
+    items: List[DailyPlanItem]
+    generated_at: datetime
