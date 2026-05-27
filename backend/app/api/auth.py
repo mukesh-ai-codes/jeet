@@ -1,106 +1,135 @@
 """
-JEET Backend — Authentication Routes
+Authentication endpoints.
 
-Endpoints:
-  POST /api/auth/login   — exchange email+password for JWT
-  GET  /api/auth/me      — get current user info from JWT
+- POST /api/auth/login           — JSON login, returns JWT
+- POST /api/auth/token           — OAuth2 form login (for Swagger), returns JWT
+- GET  /api/auth/me              — Returns the current user from JWT
+- POST /api/auth/complete-onboarding  — Marks user onboarded, returns new JWT
 """
 
-from datetime import timedelta
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.security import verify_password, create_access_token
-from app.core.config import settings
-from app.core.deps import get_current_user_payload
-from app.schemas.auth import LoginRequest, TokenResponse, CurrentUserResponse
+from app.core.deps import get_current_user
+from app.core.security import (
+    create_access_token,
+    verify_password,
+    DEMO_INSTITUTE_ID,
+)
+from app.schemas.auth import (
+    LoginRequest,
+    LoginResponse,
+    UserResponse,
+)
+
+router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
-router = APIRouter(prefix="/api/auth", tags=["Authentication"])
-
-
-@router.post("/login", response_model=TokenResponse)
-def login(payload: LoginRequest, db: Session = Depends(get_db)):
-    """
-    Authenticate a user and return a JWT.
-
-    Note: In our synthetic data, all users have password "demo123!"
-    (bcrypt hash stored in users.password_hash).
-    """
-    # Fetch user by email
-    result = db.execute(
-        text("""
-            SELECT id::text, email, full_name, role, password_hash,
-                   is_active, email_verified
+def _fetch_user_by_email(db: Session, email: str) -> dict | None:
+    """Return user row as dict, or None if not found."""
+    row = db.execute(
+        text(
+            """
+            SELECT id, email, password_hash, full_name, role, phone, is_onboarded
             FROM users
-            WHERE LOWER(email) = LOWER(:email)
-            LIMIT 1
-        """),
-        {"email": payload.email},
-    ).fetchone()
+            WHERE email = :email
+            """
+        ),
+        {"email": email},
+    ).mappings().first()
+    return dict(row) if row else None
 
-    if not result:
+
+def _build_login_response(user: dict) -> LoginResponse:
+    """Helper to build the standard login response from a user row."""
+    token = create_access_token(
+        user_id=user["id"],
+        email=user["email"],
+        role=user["role"],
+        is_onboarded=user["is_onboarded"],
+        institute_id=DEMO_INSTITUTE_ID,
+    )
+    return LoginResponse(
+        access_token=token,
+        token_type="bearer",
+        user=UserResponse(
+            id=str(user["id"]),
+            email=user["email"],
+            full_name=user["full_name"],
+            role=user["role"],
+            phone=user.get("phone"),
+            institute_id=DEMO_INSTITUTE_ID,
+            is_onboarded=user["is_onboarded"],
+        ),
+    )
+
+
+@router.post("/login", response_model=LoginResponse)
+def login_json(payload: LoginRequest, db: Session = Depends(get_db)):
+    """JSON-body login. Used by the frontend."""
+    user = _fetch_user_by_email(db, payload.email)
+    if not user or not verify_password(payload.password, user["password_hash"]):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password",
         )
-
-    user_id, email, full_name, role, password_hash, is_active, email_verified = result
-
-    # Verify password
-    if not verify_password(payload.password, password_hash):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid email or password",
-        )
-
-    if not is_active:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Account is inactive",
-        )
-
-    # Generate token
-    access_token = create_access_token(subject=user_id, role=role)
-
-    # Update last_login_at
-    db.execute(
-        text("UPDATE users SET last_login_at = NOW() WHERE id::text = :uid"),
-        {"uid": user_id},
-    )
-    db.commit()
-
-    return TokenResponse(
-        access_token=access_token,
-        expires_in=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        user_id=user_id,
-        email=email,
-        full_name=full_name,
-        role=role,
-    )
+    return _build_login_response(user)
 
 
-@router.get("/me", response_model=CurrentUserResponse)
-def get_me(
-    payload: dict = Depends(get_current_user_payload),
+@router.post("/token", response_model=LoginResponse)
+def login_oauth_form(
+    form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db),
 ):
-    """Return the currently authenticated user's details."""
-    user_id = payload.get("sub")
+    """OAuth2 form-body login. Used by Swagger UI's Authorize button."""
+    user = _fetch_user_by_email(db, form_data.username)
+    if not user or not verify_password(form_data.password, user["password_hash"]):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid email or password",
+        )
+    return _build_login_response(user)
 
+
+@router.get("/me", response_model=UserResponse)
+def get_me(current_user: dict = Depends(get_current_user)):
+    """Return the currently authenticated user's profile."""
+    return UserResponse(
+        id=str(current_user["id"]),
+        email=current_user["email"],
+        full_name=current_user["full_name"],
+        role=current_user["role"],
+        phone=current_user.get("phone"),
+        institute_id=current_user.get("institute_id", DEMO_INSTITUTE_ID),
+        is_onboarded=current_user["is_onboarded"],
+    )
+
+
+@router.post("/complete-onboarding", response_model=LoginResponse)
+def complete_onboarding(
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Mark the current user as onboarded and return a refreshed JWT.
+
+    The frontend should replace its stored token with the new one so
+    subsequent requests carry is_onboarded=true.
+    """
     result = db.execute(
-        text("""
-            SELECT id::text, email, full_name, role, phone,
-                   is_active, email_verified
-            FROM users
-            WHERE id::text = :uid
-            LIMIT 1
-        """),
-        {"uid": user_id},
-    ).fetchone()
+        text(
+            """
+            UPDATE users
+            SET is_onboarded = TRUE
+            WHERE id = :user_id
+            RETURNING id, email, password_hash, full_name, role, phone, is_onboarded
+            """
+        ),
+        {"user_id": current_user["id"]},
+    ).mappings().first()
 
     if not result:
         raise HTTPException(
@@ -108,28 +137,5 @@ def get_me(
             detail="User not found",
         )
 
-    uid, email, full_name, role, phone, is_active, email_verified = result
-
-    return CurrentUserResponse(
-        user_id=uid,
-        email=email,
-        full_name=full_name,
-        role=role,
-        phone=phone,
-        is_active=is_active,
-        email_verified=email_verified,
-    )
-@router.post("/token", response_model=TokenResponse, include_in_schema=False)
-def login_via_oauth2_form(
-    form_data: OAuth2PasswordRequestForm = Depends(),
-    db: Session = Depends(get_db),
-):
-    """
-    OAuth2-compatible login (used by Swagger UI's Authorize button).
-
-    Accepts form-encoded `username` (= email) + `password`.
-    Returns the same TokenResponse as /login.
-    """
-    # Reuse the logic by building a LoginRequest from the OAuth2 form
-    payload = LoginRequest(email=form_data.username, password=form_data.password)
-    return login(payload=payload, db=db)
+    db.commit()
+    return _build_login_response(dict(result))

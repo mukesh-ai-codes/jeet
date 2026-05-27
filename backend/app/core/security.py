@@ -1,82 +1,83 @@
 """
-JEET Backend — Security Layer
+JWT and password hashing utilities.
 
-Password hashing (bcrypt) and JWT token creation/verification.
+The JWT payload includes:
+  - sub: user_id (the JWT standard "subject" claim)
+  - email: user's email
+  - role: admin | mentor | student | parent
+  - institute_id: which institute this user belongs to (B2B tenancy)
+  - is_onboarded: has the user completed their onboarding wizard
+  - exp: expiry timestamp
+
+The institute_id is hardcoded to "demo-institute-001" until the institutes
+table exists. Every JWT-decoded request can rely on this field being present.
 """
 
 from datetime import datetime, timedelta, timezone
-from typing import Optional, Dict, Any
-from jose import jwt, JWTError
+from typing import Optional
+
+import jwt
 from passlib.context import CryptContext
 
 from app.core.config import settings
 
+# Default tenant until institutes table is added (Day 27+ migration)
+DEMO_INSTITUTE_ID = "demo-institute-001"
 
-# bcrypt password hasher (industry standard, slow-by-design)
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-
-# =============================================================
-# PASSWORD HASHING
-# =============================================================
-def hash_password(plain_password: str) -> str:
-    """Hash a plain password using bcrypt."""
-    return pwd_context.hash(plain_password)
+_pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Verify a plain password against a stored bcrypt hash."""
-    try:
-        return pwd_context.verify(plain_password, hashed_password)
-    except Exception:
-        return False
+def hash_password(plain: str) -> str:
+    """Hash a plaintext password using bcrypt."""
+    return _pwd_ctx.hash(plain)
 
 
-# =============================================================
-# JWT TOKENS
-# =============================================================
+def verify_password(plain: str, hashed: str) -> bool:
+    """Check a plaintext password against a stored bcrypt hash."""
+    return _pwd_ctx.verify(plain, hashed)
+
+
 def create_access_token(
-    subject: str,
+    *,
+    user_id: str,
+    email: str,
     role: str,
-    expires_delta: Optional[timedelta] = None,
-    extra_claims: Optional[Dict[str, Any]] = None,
+    is_onboarded: bool,
+    institute_id: str = DEMO_INSTITUTE_ID,
+    expires_minutes: Optional[int] = None,
 ) -> str:
     """
-    Create a JWT access token.
+    Generate a signed JWT for the given user.
 
-    Args:
-        subject: typically the user_id (UUID string)
-        role: user role for authorization checks
-        expires_delta: optional override of expiration
-        extra_claims: additional payload data
+    Keyword-only arguments (note the `*,`) prevent accidental positional-arg
+    swaps — easy to misorder email/role/institute_id by mistake otherwise.
     """
-    if expires_delta is None:
-        expires_delta = timedelta(minutes=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
-
+    expires_minutes = expires_minutes or settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES
     now = datetime.now(timezone.utc)
-    expire = now + expires_delta
-
     payload = {
-        "sub": subject,
+        "sub": str(user_id),
+        "email": email,
         "role": role,
-        "iat": int(now.timestamp()),
-        "exp": int(expire.timestamp()),
-        "type": "access",
+        "institute_id": institute_id,
+        "is_onboarded": is_onboarded,
+        "iat": now,
+        "exp": now + timedelta(minutes=expires_minutes),
     }
-    if extra_claims:
-        payload.update(extra_claims)
+    return jwt.encode(
+        payload,
+        settings.JWT_SECRET_KEY,
+        algorithm=settings.JWT_ALGORITHM,
+    )
 
-    return jwt.encode(payload, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
 
-
-def decode_token(token: str) -> Optional[Dict[str, Any]]:
-    """Decode and validate a JWT. Returns payload dict or None if invalid."""
-    try:
-        payload = jwt.decode(
-            token,
-            settings.JWT_SECRET_KEY,
-            algorithms=[settings.JWT_ALGORITHM],
-        )
-        return payload
-    except JWTError:
-        return None
+def decode_access_token(token: str) -> dict:
+    """
+    Decode and validate a JWT. Raises jwt.PyJWTError on any failure
+    (expired, malformed, bad signature). Callers should catch and
+    convert to HTTP 401.
+    """
+    return jwt.decode(
+        token,
+        settings.JWT_SECRET_KEY,
+        algorithms=[settings.JWT_ALGORITHM],
+    )
