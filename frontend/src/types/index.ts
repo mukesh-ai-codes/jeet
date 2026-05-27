@@ -114,3 +114,94 @@ export interface Program {
   features?: string[] | null;
   is_active: boolean;
 }
+
+
+// =========================
+// Daily plan (Day 13)
+// =========================
+
+export type DailyPlanSlot = "review" | "learn" | "practice";
+
+export interface LessonSummary {
+  id: string;
+  subject_name: string;
+  chapter: string;
+  title: string;
+  duration_minutes: number;
+  difficulty_level: number;
+  sequence_order: number;
+}
+
+export interface DailyPlanItem {
+  slot: DailyPlanSlot;
+  label: string;
+  reason: string;
+  lesson: LessonSummary;
+}
+
+export interface DailyPlanResponse {
+  student_user_id: string;
+  items: DailyPlanItem[];
+  generated_at: string;
+}
+
+// =========================
+// Weak chapters (existing endpoint, type for Day 13)
+// =========================
+
+export interface WeakChapter {
+  subject_name: string;
+  chapter: string;
+  quizzes_attempted: number;
+  avg_score: number;
+  last_attempted_at?: string;
+}
+
+export interface WeakChaptersResponse {
+  student_user_id: string;
+  weak_chapters: WeakChapter[];
+}
+
+
+// =========================
+// Streak (Day 13)
+// =========================
+
+export interface DailyActivity {
+  activity_date: string;
+  has_activity: boolean;
+}
+
+export interface StreakResponse {
+  current_streak: number;
+  longest_streak: number;
+  total_active_days: number;
+  daily_activity: DailyActivity[];
+}
+
+
+// =========================
+// Lesson detail + list (Day 13)
+// =========================
+
+export interface LessonDetail {
+  id: string;
+  subject_id: string;
+  subject_name: string;
+  chapter: string;
+  title: string;
+  description?: string | null;
+  video_url?: string | null;
+  notes_url?: string | null;
+  duration_minutes: number;
+  difficulty_level: number;
+  sequence_order: number;
+  is_published: boolean;
+}
+
+export interface LessonListResponse {
+  total: number;
+  page: number;
+  page_size: number;
+  lessons: LessonSummary[];
+}

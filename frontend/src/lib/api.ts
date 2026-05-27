@@ -10,7 +10,7 @@
  */
 
 import axios, { AxiosError, AxiosInstance } from "axios";
-import type { AuthUser, LoginRequest, LoginResponse } from "@/types";
+import type { AuthUser, LoginRequest, LoginResponse, StudentDashboard, DailyPlanResponse, WeakChaptersResponse, StreakResponse, LessonDetail, LessonListResponse } from "@/types";
 
 export const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -131,6 +131,64 @@ export type AdminConfigurePayload = {
 export const onboardingApi = {
   async configureAdmin(payload: AdminConfigurePayload) {
     const { data } = await api.post("/api/onboarding/admin/configure", payload);
+    return data;
+  },
+};
+
+
+// -------- Student API (Day 13) --------
+
+export const studentApi = {
+  async getDashboard(): Promise<StudentDashboard> {
+    const { data } = await api.get<StudentDashboard>(
+      "/api/students/me/dashboard"
+    );
+    return data;
+  },
+
+  async getDailyPlan(): Promise<DailyPlanResponse> {
+    const { data } = await api.get<DailyPlanResponse>(
+      "/api/students/me/daily-plan"
+    );
+    return data;
+  },
+
+  async getWeakChapters(): Promise<WeakChaptersResponse> {
+    const { data } = await api.get<WeakChaptersResponse>(
+      "/api/students/me/weak-chapters"
+    );
+    return data;
+  },
+
+  async getStreak(): Promise<StreakResponse> {
+    const { data } = await api.get<StreakResponse>("/api/students/me/streak");
+    return data;
+  },
+
+  async trackLessonEvent(lessonId: string, eventType: string, eventData?: Record<string, unknown>) {
+    const { data } = await api.post(
+      `/api/students/me/lessons/${lessonId}/track-event`,
+      { event_type: eventType, event_data: eventData }
+    );
+    return data;
+  },
+};
+
+
+// -------- Course API (Day 13) --------
+
+export const courseApi = {
+  async getLesson(lessonId: string): Promise<LessonDetail> {
+    const { data } = await api.get<LessonDetail>(
+      `/api/courses/lessons/${lessonId}`
+    );
+    return data;
+  },
+
+  async listLessonsByChapter(chapter: string, pageSize = 20): Promise<LessonListResponse> {
+    const { data } = await api.get<LessonListResponse>("/api/courses/lessons", {
+      params: { chapter, page_size: pageSize },
+    });
     return data;
   },
 };
