@@ -32,6 +32,25 @@ class WhisperInsight(BaseModel):
     metric_value: Optional[float] = None
 
 
+class MentorInfo(BaseModel):
+    """The mentor assigned to this child's cohort."""
+    full_name: str
+    email: Optional[str] = None
+    cohort_name: Optional[str] = None
+
+
+class InterventionSummary(BaseModel):
+    """A single mentor/system touchpoint shown to the parent."""
+    id: str
+    intervention_type: str   # mentor_call | mentor_message | parent_email | wellness_check | ...
+    notes: Optional[str] = None
+    outcome: Optional[str] = None  # successful | no_response | failed | pending
+    trigger_reason: Optional[str] = None
+    created_at: datetime
+    resolved_at: Optional[datetime] = None
+    initiator_name: str
+
+
 class ParentDashboard(BaseModel):
     """What parents see about their child's progress."""
     child_name: str
@@ -53,6 +72,12 @@ class ParentDashboard(BaseModel):
 
     # Recent activity
     last_login_at: Optional[datetime] = None
+
+    # Mentor visibility (Day 14) — mentor info + real intervention history.
+    # recent_interventions is [] when the mentor hasn't needed to act, which
+    # the UI frames positively ("hasn't needed to intervene recently").
+    mentor: Optional[MentorInfo] = None
+    recent_interventions: List[InterventionSummary] = []
     # =============================================================
 # (Already defined above: ChildSummary, ParentChildrenResponse, WhisperInsight, ParentDashboard)
 # =============================================================

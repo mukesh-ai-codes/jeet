@@ -14,6 +14,7 @@ from app.core.deps import require_role
 from app.schemas.parent import (
     ChildSummary, ParentChildrenResponse,
     WhisperInsight, ParentDashboard,
+    MentorInfo, InterventionSummary,
 )
 
 
@@ -101,6 +102,65 @@ def get_child_dashboard(
 
     insights = _generate_parent_insights(row)
 
+    # ---- Mentor info (from the child's active cohort) ----
+    mentor_row = db.execute(text("""
+        SELECT
+            u.full_name AS mentor_name,
+            u.email AS mentor_email,
+            c.name AS cohort_name
+        FROM enrollments e
+        JOIN cohorts c ON c.id = e.cohort_id
+        LEFT JOIN users u ON u.id = c.mentor_user_id
+        WHERE e.student_user_id::text = :sid
+          AND e.status = 'active'
+        LIMIT 1
+    """), {"sid": student_id}).mappings().fetchone()
+
+    mentor = None
+    if mentor_row and mentor_row["mentor_name"]:
+        mentor = MentorInfo(
+            full_name=mentor_row["mentor_name"],
+            email=mentor_row["mentor_email"],
+            cohort_name=mentor_row["cohort_name"],
+        )
+
+    # ---- Recent interventions (parent-visible touchpoints) ----
+    # Show only human-meaningful types; hide raw system nudges from parents.
+    intervention_rows = db.execute(text("""
+        SELECT
+            i.id::text AS id,
+            i.intervention_type,
+            i.notes,
+            i.outcome,
+            i.trigger_reason,
+            i.created_at,
+            i.resolved_at,
+            u.full_name AS initiator_name
+        FROM interventions i
+        JOIN users u ON u.id = i.initiated_by_user_id
+        WHERE i.student_user_id::text = :sid
+          AND i.intervention_type IN (
+            'mentor_call', 'mentor_message', 'parent_call',
+            'parent_email', 'wellness_check', 'tutor_session'
+          )
+        ORDER BY i.created_at DESC
+        LIMIT 3
+    """), {"sid": student_id}).mappings().all()
+
+    recent_interventions = [
+        InterventionSummary(
+            id=r["id"],
+            intervention_type=r["intervention_type"],
+            notes=r["notes"],
+            outcome=r["outcome"],
+            trigger_reason=r["trigger_reason"],
+            created_at=r["created_at"],
+            resolved_at=r["resolved_at"],
+            initiator_name=r["initiator_name"],
+        )
+        for r in intervention_rows
+    ]
+
     return ParentDashboard(
         child_name=row["full_name"],
         grade=row["grade"],
@@ -115,6 +175,8 @@ def get_child_dashboard(
         attendance_rate=float(row["attendance_rate"]),
         insights=insights,
         last_login_at=row["last_login_at"],
+        mentor=mentor,
+        recent_interventions=recent_interventions,
     )
 
 
