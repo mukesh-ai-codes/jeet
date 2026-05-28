@@ -10,7 +10,7 @@
  */
 
 import axios, { AxiosError, AxiosInstance } from "axios";
-import type { AuthUser, LoginRequest, LoginResponse, StudentDashboard, DailyPlanResponse, WeakChaptersResponse, StreakResponse, LessonDetail, LessonListResponse, ParentChildrenResponse, ParentDashboard } from "@/types";
+import type { AuthUser, LoginRequest, LoginResponse, StudentDashboard, DailyPlanResponse, WeakChaptersResponse, StreakResponse, LessonDetail, LessonListResponse, ParentChildrenResponse, ParentDashboard, MentorCohortsResponse, AtRiskListResponse, StudentWhisperResponse, InterventionCreatePayload, InterventionCreateResponse } from "@/types";
 
 export const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -207,6 +207,36 @@ export const parentApi = {
   async getChildDashboard(studentId: string): Promise<ParentDashboard> {
     const { data } = await api.get<ParentDashboard>(
       `/api/parents/me/children/${studentId}/dashboard`
+    );
+    return data;
+  },
+};
+
+
+// -------- Mentor API (Day 15) --------
+
+export const mentorApi = {
+  async getCohorts(): Promise<MentorCohortsResponse> {
+    const { data } = await api.get<MentorCohortsResponse>("/api/mentors/me/cohorts");
+    return data;
+  },
+
+  async getAtRiskStudents(): Promise<AtRiskListResponse> {
+    const { data } = await api.get<AtRiskListResponse>("/api/mentors/me/at-risk-students");
+    return data;
+  },
+
+  async getStudentWhisper(studentId: string): Promise<StudentWhisperResponse> {
+    const { data } = await api.get<StudentWhisperResponse>(
+      `/api/mentors/me/students/${studentId}/whisper`
+    );
+    return data;
+  },
+
+  async logIntervention(payload: InterventionCreatePayload): Promise<InterventionCreateResponse> {
+    const { data } = await api.post<InterventionCreateResponse>(
+      "/api/mentors/interventions",
+      payload
     );
     return data;
   },
