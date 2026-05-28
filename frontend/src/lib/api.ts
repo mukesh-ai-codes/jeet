@@ -10,7 +10,7 @@
  */
 
 import axios, { AxiosError, AxiosInstance } from "axios";
-import type { AuthUser, LoginRequest, LoginResponse, StudentDashboard, DailyPlanResponse, WeakChaptersResponse, StreakResponse, LessonDetail, LessonListResponse } from "@/types";
+import type { AuthUser, LoginRequest, LoginResponse, StudentDashboard, DailyPlanResponse, WeakChaptersResponse, StreakResponse, LessonDetail, LessonListResponse, ParentChildrenResponse, ParentDashboard } from "@/types";
 
 export const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -189,6 +189,25 @@ export const courseApi = {
     const { data } = await api.get<LessonListResponse>("/api/courses/lessons", {
       params: { chapter, page_size: pageSize },
     });
+    return data;
+  },
+};
+
+
+// -------- Parent API (Day 14) --------
+
+export const parentApi = {
+  async getChildren(): Promise<ParentChildrenResponse> {
+    const { data } = await api.get<ParentChildrenResponse>(
+      "/api/parents/me/children"
+    );
+    return data;
+  },
+
+  async getChildDashboard(studentId: string): Promise<ParentDashboard> {
+    const { data } = await api.get<ParentDashboard>(
+      `/api/parents/me/children/${studentId}/dashboard`
+    );
     return data;
   },
 };

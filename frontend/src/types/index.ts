@@ -205,3 +205,64 @@ export interface LessonListResponse {
   page_size: number;
   lessons: LessonSummary[];
 }
+
+
+// =========================
+// Parent dashboard (Day 14)
+// =========================
+
+export interface ChildSummary {
+  student_user_id: string;
+  full_name: string;
+  grade: number;
+  target_exam: string;
+  program_name: string;
+  enrollment_status: string;
+  relationship: string;
+}
+
+export interface ParentChildrenResponse {
+  children: ChildSummary[];
+}
+
+export interface WhisperInsight {
+  severity: "positive" | "info" | "watch" | "urgent";
+  category: "engagement" | "academic" | "wellness" | "financial";
+  message: string;
+  metric_value?: number | null;
+}
+
+export interface MentorInfo {
+  full_name: string;
+  email?: string | null;
+  cohort_name?: string | null;
+}
+
+export interface InterventionSummary {
+  id: string;
+  intervention_type: string;
+  notes?: string | null;
+  outcome?: string | null;
+  trigger_reason?: string | null;
+  created_at: string;
+  resolved_at?: string | null;
+  initiator_name: string;
+}
+
+export interface ParentDashboard {
+  child_name: string;
+  grade: number;
+  target_exam: string;
+  program_name: string;
+  days_active: number;
+  enrollment_status: string;
+  total_logins: number;
+  days_since_last_login: number;
+  lesson_completion_rate: number;
+  avg_score_pct: number;
+  attendance_rate: number;
+  insights: WhisperInsight[];
+  last_login_at?: string | null;
+  mentor?: MentorInfo | null;
+  recent_interventions: InterventionSummary[];
+}
