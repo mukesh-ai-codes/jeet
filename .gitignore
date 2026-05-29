@@ -61,3 +61,4 @@ htmlcov/
 # Misc
 *.bak
 *.tmpml/artifacts/
+ml/tara/chroma_db/

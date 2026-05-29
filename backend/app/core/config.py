@@ -38,6 +38,10 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440  # 24 hours
 
+    # ----- Tara AI Tutor (Gemini) -----
+    GEMINI_API_KEY: str = Field(default="", description="Google Gemini API key")
+    TARA_MODEL: str = "gemini-2.5-flash-lite"
+
     # ----- CORS -----
     BACKEND_CORS_ORIGINS: List[str] = [
         "http://localhost:3000",

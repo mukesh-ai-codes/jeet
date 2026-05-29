@@ -13,6 +13,7 @@ from app.api import (
     auth, health, students, mentors, admin,
     courses, parents, analytics, interventions,
     onboarding,
+    tara,
 )# =============================================================
 # LIFESPAN: startup & shutdown hooks
 # =============================================================
@@ -68,6 +69,7 @@ app.include_router(parents.router)
 app.include_router(analytics.router)
 app.include_router(interventions.router)
 app.include_router(onboarding.router)
+app.include_router(tara.router)
 
 # =============================================================
 # ROOT
