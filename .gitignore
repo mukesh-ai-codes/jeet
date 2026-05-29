@@ -60,5 +60,11 @@ htmlcov/
 
 # Misc
 *.bak
-*.tmpml/artifacts/
+*.tmp
 ml/tara/chroma_db/
+
+# Large local artifacts (don't commit)
+ml/artifacts/
+jeet_local_dump.dump
+*.dump
+restore_log.txt
