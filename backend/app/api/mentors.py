@@ -66,7 +66,7 @@ def get_my_cohorts(
 def get_at_risk_students(
     payload: dict = Depends(require_role("mentor", "admin")),
     db: Session = Depends(get_db),
-    limit: int = 50,
+    limit: int = 150,
 ):
     """
     The Whisper Layer — students needing intervention, ranked by risk.
@@ -91,6 +91,22 @@ def get_at_risk_students(
         """
         params = {"uid": user_id, "limit": limit}
 
+    # Summary counts: computed over the FULL at-risk population (no LIMIT) so the
+    # mentor's summary strip is always truthful, independent of the display cap.
+    count_rows = db.execute(text(f"""
+        SELECT risk_tier, COUNT(*) AS n
+        FROM v_at_risk_students
+        WHERE {where_clause}
+          AND risk_tier IN ('urgent', 'critical', 'watch')
+        GROUP BY risk_tier
+    """), params).mappings().all()
+    counts = {cr["risk_tier"]: int(cr["n"]) for cr in count_rows}
+    urgent = counts.get("urgent", 0)
+    critical = counts.get("critical", 0)
+    watch = counts.get("watch", 0)
+    total_at_risk = urgent + critical + watch
+
+    # Display queue: focused triage list, capped. Worst-first by risk score.
     rows = db.execute(text(f"""
         SELECT *
         FROM v_at_risk_students
@@ -100,13 +116,8 @@ def get_at_risk_students(
         LIMIT :limit
     """), params).mappings().all()
 
-    # Build summary counts
-    urgent = sum(1 for r in rows if r["risk_tier"] == "urgent")
-    critical = sum(1 for r in rows if r["risk_tier"] == "critical")
-    watch = sum(1 for r in rows if r["risk_tier"] == "watch")
-
     return AtRiskListResponse(
-        total_at_risk=len(rows),
+        total_at_risk=total_at_risk,
         urgent_count=urgent,
         critical_count=critical,
         watch_count=watch,
