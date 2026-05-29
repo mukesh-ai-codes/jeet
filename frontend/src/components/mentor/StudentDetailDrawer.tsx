@@ -127,6 +127,20 @@ export default function StudentDetailDrawer({
 
         {/* Body */}
         <div className="px-6 py-5 space-y-6">
+          {whisper?.model_reasons && whisper.model_reasons.length > 0 && (
+            <div className="mb-5 rounded-xl border border-indigo-200 bg-indigo-50 p-4">
+              <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-indigo-700">
+                <span className="inline-block h-1.5 w-1.5 rounded-full bg-indigo-500" />
+                Sentinel Engine flagged this student
+              </div>
+              <ul className="mt-2 space-y-1">
+                {whisper.model_reasons.map((r, i) => (
+                  <li key={i} className="text-sm text-indigo-900">• {r}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           {/* Whisper Layer */}
           <section>
             <h3 className="font-display text-sm font-semibold text-slate-900 flex items-center gap-2">

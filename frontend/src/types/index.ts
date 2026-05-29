@@ -268,3 +268,42 @@ export interface ParentDashboard {
   mentor?: MentorInfo | null;
   recent_interventions: InterventionSummary[];
 }
+
+// =========================
+// Mentor — at-risk + whisper (Day 15/19; defined here to harden tsc build)
+// =========================
+
+export interface AtRiskStudent {
+  student_user_id: string;
+  full_name: string;
+  grade: number;
+  target_exam: string;
+  program_slug: string;
+  days_since_last_login: number;
+  lesson_completion_rate: number;
+  avg_score_pct: number;
+  attendance_rate: number;
+  failed_assessments: number;
+  failed_payments: number;
+  risk_score: number;
+  risk_tier: RiskTier;
+  enrollment_status: string;
+}
+
+export interface WhisperAnnotation {
+  category: "concern" | "positive" | "info";
+  severity: "high" | "medium" | "low";
+  title: string;
+  detail: string;
+  evidence: string[];
+}
+
+export interface StudentWhisperResponse {
+  student_user_id: string;
+  full_name: string;
+  risk_tier: RiskTier;
+  risk_score: number;
+  annotations: WhisperAnnotation[];
+  suggested_intervention?: string;
+  model_reasons?: string[];
+}

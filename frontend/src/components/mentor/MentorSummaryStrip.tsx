@@ -34,7 +34,7 @@ export default function MentorSummaryStrip({
       <StripTile
         label="Urgent"
         value={String(urgent)}
-        sub="risk_score ≥ 70"
+        sub="highest risk"
         icon={AlertCircle}
         tone="text-red-700"
       />

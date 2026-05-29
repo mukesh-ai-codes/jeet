@@ -64,3 +64,4 @@ class StudentWhisperResponse(BaseModel):
     risk_score: float
     annotations: List[WhisperAnnotation]
     suggested_intervention: Optional[str] = None
+    model_reasons: List[str] = []

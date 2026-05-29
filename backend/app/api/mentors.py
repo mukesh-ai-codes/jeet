@@ -188,6 +188,11 @@ def get_student_whisper(
     annotations = _generate_whisper_annotations(row)
     suggested = _suggest_intervention(row)
 
+    reasons_row = db.execute(text(
+        "SELECT reasons FROM student_risk_scores WHERE student_user_id = :sid"
+    ), {"sid": student_id}).mappings().fetchone()
+    model_reasons = list(reasons_row["reasons"]) if reasons_row and reasons_row["reasons"] else []
+
     return StudentWhisperResponse(
         student_user_id=row["student_user_id"],
         full_name=row["full_name"],
@@ -195,6 +200,7 @@ def get_student_whisper(
         risk_score=float(row["risk_score"]),
         annotations=annotations,
         suggested_intervention=suggested,
+        model_reasons=model_reasons,
     )
 
 
