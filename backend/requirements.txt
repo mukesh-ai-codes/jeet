@@ -37,3 +37,6 @@ pandas==2.2.3
 # AI tutor (Tara)
 chromadb==1.5.9
 google-genai==2.7.0
+
+# JWT (PyJWT — used by deps.py)
+PyJWT==2.13.0
