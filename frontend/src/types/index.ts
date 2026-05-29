@@ -307,3 +307,46 @@ export interface StudentWhisperResponse {
   suggested_intervention?: string;
   model_reasons?: string[];
 }
+
+// =========================
+// Mentor — cohorts + at-risk list + intervention create (deploy-hardening)
+// =========================
+
+export interface MentorCohort {
+  active_students: number;
+  cohort_id: string;
+  cohort_name: string;
+  program_name: string;
+  total_students: number;
+  at_risk_count: number;
+}
+
+export interface MentorCohortsResponse {
+  mentor_name: string;
+  total_students: number;
+  cohorts: MentorCohort[];
+}
+
+export interface AtRiskListResponse {
+  total_at_risk: number;
+  total: number;
+  urgent_count: number;
+  critical_count: number;
+  watch_count: number;
+  students: AtRiskStudent[];
+}
+
+export interface InterventionCreatePayload {
+  student_user_id: string;
+  intervention_type: string;
+  notes?: string | null;
+  trigger_reason?: string | null;
+}
+
+export interface InterventionCreateResponse {
+  id: string;
+  student_user_id: string;
+  intervention_type: string;
+  outcome: string;
+  created_at: string;
+}

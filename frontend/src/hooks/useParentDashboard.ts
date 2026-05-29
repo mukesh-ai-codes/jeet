@@ -70,7 +70,7 @@ export function useParentDashboard(): UseParentDashboardReturn {
       setDashboardLoading(true);
       setError(null);
       try {
-        const data = await parentApi.getChildDashboard(selectedChildId);
+        const data = await parentApi.getChildDashboard(selectedChildId!);
         if (cancelled) return;
         setDashboard(data);
       } catch (err) {
