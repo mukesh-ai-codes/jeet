@@ -1,43 +1,34 @@
 /**
- * Day-13 helper: derive a risk tier client-side from dashboard data.
+ * Day 16: the backend now sends the REAL risk_tier on the student dashboard
+ * (computed the same way as the mentor's view), so we no longer derive it
+ * client-side. This file now does ONE small job: soften the real tier for the
+ * student's OWN screen.
  *
- * The backend `v_student_features` view computes a real risk tier with 47
- * signals, but `/api/students/me/dashboard` doesn't yet expose it.
+ * Why soften? Mentors and parents should see the truth ("urgent"). But a
+ * student opening their own home screen should never be greeted by a blaring
+ * "URGENT" — that's demotivating, the opposite of retention. So we map the
+ * real tier down one notch for the student view only.
  *
- * Day 16 polish should:
- *   1. Add `risk_tier: str` to StudentDashboard Pydantic schema
- *   2. Surface it in the dashboard endpoint query
- *   3. Replace calls to deriveRisk() with `dashboard.risk_tier` directly
- *
- * Until then this gives a directionally-correct tier from signals we already
- * have. Conservative on the urgent end — we'd rather under-flag than have a
- * student see "URGENT" on a friendly home screen.
+ * The real tier is still what the backend stores and what mentors/parents see.
+ * We return a RiskTier so the existing WelcomeHeader / RiskChip keep working
+ * with zero changes — we just feed them a gentler value.
  */
 
-import type { StudentDashboard } from "@/types";
+import type { RiskTier } from "@/types";
 
-export type RiskTier = "stable" | "watch" | "critical" | "urgent" | "lost";
-
-export function deriveRisk(dashboard: StudentDashboard | null): RiskTier {
-  if (!dashboard) return "stable";
-
-  const eng = dashboard.engagement;
-  const learn = dashboard.learning;
-  const asses = dashboard.assessments;
-
-  if (dashboard.enrollment.status === "churned") return "lost";
-
-  // Urgent — major recent disengagement or score collapse
-  if (eng.days_since_last_login > 7) return "urgent";
-  if (asses.recent_avg_score_pct > 0 && asses.recent_avg_score_pct < 35) return "urgent";
-
-  // Critical — moderate slipping
-  if (eng.days_since_last_login > 3) return "critical";
-  if (learn.attendance_rate < 0.5 && learn.sessions_scheduled > 0) return "critical";
-
-  // Watch — early warning
-  if (asses.recent_avg_score_pct > 0 && asses.recent_avg_score_pct < 50) return "watch";
-  if (learn.lesson_completion_rate < 0.4 && learn.lessons_started > 5) return "watch";
-
-  return "stable";
+/** Map the real backend tier -> a gentler tier for the student's own view. */
+export function softenTierForStudent(tier: RiskTier | undefined | null): RiskTier {
+  switch (tier) {
+    case "urgent":
+      return "critical";  // still serious, but not alarm-red on a kid's home screen
+    case "critical":
+      return "watch";
+    case "watch":
+      return "watch";
+    case "lost":
+      return "lost";
+    case "stable":
+    default:
+      return "stable";
+  }
 }

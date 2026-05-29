@@ -13,7 +13,7 @@ import DashboardSkeleton from "@/components/student/DashboardSkeleton";
 
 import { useAuth } from "@/hooks/useAuth";
 import { useStudentDashboard } from "@/hooks/useStudentDashboard";
-import { deriveRisk } from "@/lib/riskDerive";
+import { softenTierForStudent } from "@/lib/riskDerive";
 
 export default function StudentDashboardPage() {
   return (
@@ -34,7 +34,7 @@ function DashboardContent() {
   }
 
   const firstName = user?.full_name?.split(" ")[0] || "there";
-  const riskTier = deriveRisk(data.dashboard);
+  const riskTier = softenTierForStudent(data.dashboard?.risk_tier);
   const streakDays = data.streak?.current_streak ?? null;
 
   return (

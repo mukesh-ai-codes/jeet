@@ -86,6 +86,40 @@ def get_my_dashboard(
         LIMIT 5
     """), {"uid": user_id}).mappings().all()
 
+    # 4b. Compute real risk tier/score — SAME logic as v_at_risk_students,
+    #     so the student's own view never disagrees with the mentor's view.
+    _score_drop = float(row["avg_score_pct"]) - float(row["recent_avg_score_pct"])
+    _avg = float(row["avg_score_pct"])
+    _fa = int(row["failed_assessments"])
+    _fp = int(row["failed_payments"])
+    _vol = float(row["score_volatility"])
+    _comp = float(row["lesson_completion_rate"])
+    _att = float(row["attendance_rate"])
+    _dsl = float(row["days_since_last_login"])
+    _status = row["enrollment_status"]
+
+    _risk_score = min(100.0, max(0.0,
+        min(30.0, max(0.0, _score_drop) * 3.0)
+        + min(24.0, _fa * 6.0)
+        + min(24.0, _fp * 12.0)
+        + min(15.0, max(0.0, _vol - 10.0))
+        + (12.0 if _avg < 35 else 0.0)
+        + (8.0 if _comp < 0.4 else 0.0)
+        + (8.0 if _att < 0.5 else 0.0)
+        + min(10.0, _dsl * 0.5)
+    ))
+
+    if _status in ("churned", "cancelled"):
+        _risk_tier = "lost"
+    elif (_fp >= 1 and _score_drop >= 10) or (_avg < 35 and _score_drop >= 10) or _fa >= 4:
+        _risk_tier = "urgent"
+    elif _score_drop >= 10 or _fa >= 2 or _comp < 0.4 or _fp >= 1:
+        _risk_tier = "critical"
+    elif _vol > 15 or _fa >= 1 or _score_drop >= 5 or _att < 0.5:
+        _risk_tier = "watch"
+    else:
+        _risk_tier = "stable"
+
     # 5. Compose response
     return StudentDashboard(
         profile=StudentProfileBlock(
@@ -145,6 +179,8 @@ def get_my_dashboard(
             )
             for r in recent_rows
         ],
+        risk_tier=_risk_tier,
+        risk_score=round(_risk_score, 1),
     )
 
 

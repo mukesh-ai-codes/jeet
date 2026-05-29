@@ -98,6 +98,8 @@ export interface StudentDashboard {
     percentage: number;
     submitted_at: string;
   }>;
+  risk_tier: RiskTier;
+  risk_score: number;
 }
 
 // =========================

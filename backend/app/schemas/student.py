@@ -81,6 +81,8 @@ class StudentDashboard(BaseModel):
     learning: LearningProgressBlock
     assessments: AssessmentSummaryBlock
     recent_assessments: List[RecentAssessment]
+    risk_tier: str    # real backend tier: stable|watch|critical|urgent|lost
+    risk_score: float # 0-100, same scale as the mentor view
 
 
 # =============================================================
