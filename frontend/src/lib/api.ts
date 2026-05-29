@@ -110,7 +110,7 @@ export const authApi = {
 export type AdminConfigurePayload = {
   institute_name: string;
   institute_size: "1-2" | "3-5" | "6-15" | "16-50" | "50+";
-  primary_exams: Array<"JEE" | "NEET" | "Foundation" | "Other">;
+  primary_exams: Array<"JEE Main" | "JEE Advanced" | "NEET" | "Foundation" | "Other">;
   cohort_count: number;
   mentor_count: number;
   review_tool_today:

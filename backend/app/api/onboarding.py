@@ -21,13 +21,24 @@ from app.core.deps import get_current_user
 
 router = APIRouter(prefix="/api/onboarding", tags=["onboarding"])
 
+# Source of truth for Day 27 institutes-table write. Maps wizard labels ->
+# DB exam_type enums. Defined now so the distinction is captured at onboarding;
+# not yet wired to a DB write (no institutes table until Day 27).
+EXAM_LABEL_TO_ENUM = {
+    "JEE Main": "jee_main",
+    "JEE Advanced": "jee_advanced",
+    "NEET": "neet_ug",
+    "Foundation": "foundation",
+    "Other": "board",
+}
+
 
 class AdminConfigurePayload(BaseModel):
     """Shape submitted from the admin onboarding wizard."""
 
     institute_name: str = Field(min_length=2, max_length=120)
     institute_size: str  # "1-2" | "3-5" | "6-15" | "16-50" | "50+"
-    primary_exams: list[str]  # subset of ["JEE", "NEET", "Foundation", "Other"]
+    primary_exams: list[str]  # subset of ["JEE Main","JEE Advanced","NEET","Foundation","Other"]
     cohort_count: int = Field(ge=0, le=10000)
     mentor_count: int = Field(ge=0, le=10000)
     review_tool_today: str  # "spreadsheets" | "whatsapp" | "lms" | "nothing_structured"
@@ -63,6 +74,7 @@ def configure_admin_institute(
     print(f"   Institute:  {payload.institute_name}")
     print(f"   Size:       {payload.institute_size}")
     print(f"   Exams:      {', '.join(payload.primary_exams)}")
+    print(f"   -> enums:   {[EXAM_LABEL_TO_ENUM.get(e, '?') for e in payload.primary_exams]}")
     print(f"   Cohorts:    {payload.cohort_count}")
     print(f"   Mentors:    {payload.mentor_count}")
     print(f"   Review:     {payload.review_tool_today}")

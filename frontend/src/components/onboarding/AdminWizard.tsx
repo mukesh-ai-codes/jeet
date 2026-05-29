@@ -54,7 +54,8 @@ const SIZE_OPTIONS = [
 ] as const;
 
 const EXAM_OPTIONS = [
-  { value: "JEE", label: "JEE" },
+  { value: "JEE Main", label: "JEE (Main)" },
+  { value: "JEE Advanced", label: "JEE (Advanced)" },
   { value: "NEET", label: "NEET" },
   { value: "Foundation", label: "Foundation (Class 8–10)" },
   { value: "Other", label: "Other" },
