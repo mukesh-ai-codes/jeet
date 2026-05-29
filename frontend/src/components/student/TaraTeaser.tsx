@@ -8,6 +8,7 @@
  * faking the product.
  */
 
+import Link from "next/link";
 import { Sparkles, BookOpen, MessageSquare, Lightbulb } from "lucide-react";
 
 const HIGHLIGHTS = [
@@ -51,7 +52,7 @@ export default function TaraTeaser() {
         <div className="md:col-span-2">
           <div className="inline-flex items-center gap-2 rounded-full bg-white/15 px-3 py-1 text-xs font-semibold backdrop-blur-sm">
             <Sparkles className="h-3 w-3 text-orange-300" />
-            Launching next week · Agentic AI Tutor
+            Live now · Agentic AI Tutor
           </div>
 
           <h2 className="mt-4 font-display text-2xl md:text-3xl font-bold leading-tight">
@@ -77,15 +78,14 @@ export default function TaraTeaser() {
           </div>
         </div>
 
-        <div className="hidden md:flex justify-end">
-          <div className="text-right">
-            <div className="text-[10px] uppercase tracking-widest text-indigo-300">
-              Ships
-            </div>
-            <div className="font-display text-4xl font-bold mt-1">
-              Day&nbsp;20
-            </div>
-          </div>
+        <div className="flex justify-start md:justify-end">
+          <Link
+            href="/student/tara"
+            className="inline-flex items-center gap-2 rounded-xl bg-white px-5 py-3 text-sm font-semibold text-indigo-700 shadow-sm transition hover:bg-indigo-50"
+          >
+            <Sparkles className="h-4 w-4 text-orange-500" />
+            Chat with Tara
+          </Link>
         </div>
       </div>
     </div>

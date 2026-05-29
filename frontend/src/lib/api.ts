@@ -241,3 +241,23 @@ export const mentorApi = {
     return data;
   },
 };
+
+
+export type TaraChatPayload = {
+  message: string;
+  mode: string;
+  memory?: Array<{ role: string; text: string }>;
+};
+export type TaraChatResponse = {
+  reply: string;
+  mode: string;
+  sources: (string | null)[];
+  frustration_detected: boolean;
+  handoff_created: boolean;
+};
+export const taraApi = {
+  async chat(payload: TaraChatPayload): Promise<TaraChatResponse> {
+    const { data } = await api.post<TaraChatResponse>("/api/tara/chat", payload);
+    return data;
+  },
+};
