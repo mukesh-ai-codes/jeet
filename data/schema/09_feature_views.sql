@@ -118,7 +118,7 @@ login_continuity AS (
             / GREATEST(1, EXTRACT(DAY FROM (MAX(created_at) - MIN(created_at))) + 1)
             AS active_day_ratio
     FROM events
-    WHERE event_type = 'user_login'
+    WHERE event_type IN ('user_login','lesson_started','lesson_completed','quiz_submitted','quiz_started','doubt_asked_tutor','doubt_asked_mentor','doubt_resolved','mock_test_submitted')
     GROUP BY user_id
 )
 SELECT
